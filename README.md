@@ -1,12 +1,10 @@
-Geodesic interpolations and smoothing
+Geodesic interpolations of reaction pathways
 ====
 Constructing interpolation paths between molecular geometries to obtain reaction path.
 
-The paths are determined by minimization of the total path length in internal coordinate metric, or in other words the integrated total coordinate change is minimized. Such a definition ensures that the constructed paths are smooth and well behaved. The package is also used for smoothing discontinuous or noisy trajectories obtained from MD simulations.
+Traditional interpolation methods encounter difficulty when it comes to redundant internal coordinate spaces, because the feasible physical space compose only a very small and highly curved subspace.  In this method, we avoid the problem of feasibility by operating strictly in feasible space, and bring in the benefit of internal coordinates through proper application of the corresponding metric tensor.  With this new formulation, we view the configuration space as a Riemannian manifold with a metric generated from a set of internal coordinates. The interpolation paths are defined as geodesic curves on such manifolds.  In other words the integrated total coordinate change is minimized. Such a definition ensures that the constructed paths are smooth and well behaved. The package is also used for smoothing discontinuous or noisy trajectories obtained from MD simulations.
 
-The default coordinate system uses Morse scaled pair-wise distances.  The lengths in such coordinate systems have the physical meaning of the total number of bond changes along the path.
-
-It has been shown that the method generate smooth paths with reasonable barrier height even for highly complex reactions, such as protein unfolding or concerted cycloaddition reactions with many simutaneous ring formations. 
+It has been shown that the method generate smooth paths with reasonable barrier height even for highly complex reactions, such as protein unfolding or concerted cycloaddition reactions with many simutaneous ring formations.   The default coordinate system uses Morse scaled pair-wise distances.  The lengths in such coordinate systems have the physical meaning of the total number of bond changes along the path.
 
 This is a pure python implementation, so it is not optimized for speed, but rather is intended to serve as a reference implementation of the algorithms described in the paper.  Still, interpolating systems with ~1000 atoms should not be a problem.
 
