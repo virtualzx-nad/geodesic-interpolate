@@ -59,6 +59,15 @@ Scipy  :  Tested with 0.19
 
 Installation
 ----
+
+### From PyPI (Recommended)
+
+The package can be installed directly from PyPI using pip:
+
+    pip install geodesic_interpolate
+
+### From Source
+
 The package can be used without installation from the package directory with
 
     python -m geodesic_interpolate filename ...
@@ -71,7 +80,7 @@ This will install a Python package `geodesic_interpolate` and a standalone scrip
 The package can be involved from arbitrary location using the aforementioned command line after installation,
 and a standalone script with the same signature can also be used
 
-    geodesic_interpolate filename.xyz --output output.xyz --nimages 20 ...
+    geodesic_interpolate filename.xyz --output output.xyz --nimages 20 ....
 
 
 Usage
