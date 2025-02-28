@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geodesic_interpolate"
+version = "1.0.0"
+authors = [
+    { name="Xiaolei Zhu", email="virtualzx@gmail.com" },
+]
+description = "Interpolation and smoothing of reaction paths with geodesics in redundant internal coordinates"
+readme = "README.md"
+requires-python = ">=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 2.7",
+    "Programming Language :: Python :: 3.5",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+keywords = ["chemistry", "physics", "reaction-path", "interpolation", "geodesic"]
+dependencies = [
+    "numpy>=1.13",
+    "scipy>=0.19",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/virtualzx-nad/geodesic-interpolate"
+"Bug Tracker" = "https://github.com/virtualzx-nad/geodesic-interpolate/issues"
+
+[project.scripts]
+geodesic_interpolate = "geodesic_interpolate.__main__:main"
