@@ -50,7 +50,7 @@ Directory Structure
 Prerequisites
 ----
 
-Python :  >2.7 or >3.5 
+Python :  >=3.8
 
 Numpy  :  Tested with 1.13
 
@@ -60,9 +60,9 @@ Scipy  :  Tested with 0.19
 Installation
 ----
 
-### From PyPI (Recommended)
+### From PyPI
 
-The package can be installed directly from PyPI using pip:
+Once a release has been published to PyPI, install the package with:
 
     pip install geodesic_interpolate
 
@@ -72,15 +72,15 @@ The package can be used without installation from the package directory with
 
     python -m geodesic_interpolate filename ...
 
-To use the script from arbitrary location or to use the Python module, use setup tools:
+To use the script from an arbitrary location or import the Python module, install the package with pip:
 
-    python setup.py install
+    python -m pip install .
 
 This will install a Python package `geodesic_interpolate` and a standalone script `geodesic_interpolate`.
-The package can be involved from arbitrary location using the aforementioned command line after installation,
+The package can be invoked from an arbitrary location using the aforementioned command line after installation,
 and a standalone script with the same signature can also be used
 
-    geodesic_interpolate filename.xyz --output output.xyz --nimages 20 ....
+    geodesic_interpolate filename.xyz --output output.xyz --nimages 20 ...
 
 
 Usage
@@ -114,4 +114,3 @@ optional arguments:
   * `--dist-cutoff DIST_CUTOFF` Cut-off value for the distance between a pair of atoms to be included in the coordinate system. (default: 3)
   * `--logging {DEBUG,INFO,WARNING,ERROR}`   Logging level to adopt [ DEBUG | INFO | WARNING | ERROR ] (default: INFO)
   * `--save-raw SAVE_RAW`   When specified, save the raw path after bisections be before smoothing. (default: None)
-
