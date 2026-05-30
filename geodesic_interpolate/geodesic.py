@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class Geodesic(object):
     """Optimizer to obtain geodesic in redundant internal coordinates.  Core part is the calculation
     of the path length in the internal metric."""
-    def __init__(self, atoms, path, scaler=1.7, threshold=3, min_neighbors=4, log_level=logging.INFO,
+    def __init__(self, atoms, path, scaler=1.7, threshold=3.0, min_neighbors=4, log_level=logging.INFO,
                  friction=1e-3):
         """Initialize the interpolater
         Args:
