@@ -2,6 +2,7 @@
 import logging
 
 import numpy as np
+from scipy import sparse
 from scipy.spatial import KDTree
 
 
@@ -184,6 +185,42 @@ def compute_wij(geom, rij_list, func):
     for idx, grad in enumerate(dwdr):
         bmat[idx] *= grad
     return wij, bmat.reshape(nrij, -1)
+
+
+def compute_rij_sparse(geom, rij_list):
+    """Calculate distances and sparse Cartesian gradients for selected pairs.
+
+    This is equivalent to :func:`compute_rij`, except the derivative matrix is
+    returned as CSR with shape ``(nrij, 3 * natoms)``.
+    """
+    geom = np.asarray(geom).reshape(-1, 3)
+    nrij = len(rij_list)
+    if nrij == 0:
+        return np.zeros(0), sparse.csr_matrix((0, geom.size))
+
+    pairs = np.asarray(rij_list, dtype=int)
+    dvec = geom[pairs[:, 0]] - geom[pairs[:, 1]]
+    rij = np.linalg.norm(dvec, axis=1)
+    grad = dvec / rij[:, None]
+
+    rows = np.repeat(np.arange(nrij), 6)
+    atom_cols = pairs[:, :, None] * 3 + np.arange(3)
+    cols = atom_cols.reshape(nrij, 6).ravel()
+    data = np.concatenate([grad, -grad], axis=1).ravel()
+    bmat = sparse.csr_matrix((data, (rows, cols)), shape=(nrij, geom.size))
+    return rij, bmat
+
+
+def compute_wij_sparse(geom, rij_list, func):
+    """Calculate scaled distances and sparse Cartesian gradients.
+
+    The scaled coordinate values match :func:`compute_wij`. The derivative
+    matrix is CSR with shape ``(nrij, 3 * natoms)``.
+    """
+    rij, bmat = compute_rij_sparse(geom, rij_list)
+    wij, dwdr = func(rij)
+    dwdr = np.asarray(dwdr)
+    return wij, bmat.multiply(dwdr[:, None]).tocsr()
 
 
 def morse_scaler(re=1.5, alpha=1.7, beta=0.01):

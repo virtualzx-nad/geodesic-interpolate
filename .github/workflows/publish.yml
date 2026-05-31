@@ -28,6 +28,7 @@ jobs:
     - name: Run smoke interpolation
       run: |
         python -c "import geodesic_interpolate"
+        python -m unittest discover -s tests -v
         geodesic_interpolate --help
         geodesic_interpolate test_cases/H+CH4_CH3+H2.xyz \
           --nimages 5 \

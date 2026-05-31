@@ -5,9 +5,11 @@ with redundant internals.
 import logging
 
 import numpy as np
+from scipy import sparse
 from scipy.optimize import least_squares
 
-from .coord_utils import align_path, get_bond_list, morse_scaler, compute_wij
+from .coord_utils import (
+    align_path, compute_wij, compute_wij_sparse, get_bond_list, morse_scaler)
 
 
 logger = logging.getLogger(__name__)
@@ -56,7 +58,18 @@ class Geodesic(object):
         self.w_mid = [None] * (len(path) - 1)
         self.dwdR_mid = [None] * (len(path) - 1)
         self.disps = self.grad = self.segment = None
+        self._target_x0 = None
+        self._target_friction = None
         self.conv_path = []
+
+    def _resolve_segment(self, start, end):
+        """Resolve and validate the optimized interior image range."""
+        if end < 0:
+            end += self.nimages
+        if start < 1 or end > self.nimages - 1 or start >= end:
+            raise ValueError(
+                "Optimization segment must satisfy 1 <= start < end <= nimages - 1")
+        return start, end
 
     def update_intc(self):
         """Adjust unknown locations of mid points and compute missing values of internal coordinates
@@ -65,11 +78,11 @@ class Geodesic(object):
         gradients of internal coordinates."""
         for i, (X, w, dwdR) in enumerate(zip(self.path, self.w, self.dwdR)):
             if w is None:
-                self.w[i], self.dwdR[i] = compute_wij(X, self.rij_list, self.scaler)
+                self.w[i], self.dwdR[i] = compute_wij_sparse(X, self.rij_list, self.scaler)
         for i, (X0, X1, w) in enumerate(zip(self.path, self.path[1:], self.w_mid)):
             if w is None:
                 self.X_mid[i] = Xm = (X0 + X1) / 2
-                self.w_mid[i], self.dwdR_mid[i] = compute_wij(Xm, self.rij_list, self.scaler)
+                self.w_mid[i], self.dwdR_mid[i] = compute_wij_sparse(Xm, self.rij_list, self.scaler)
 
     def update_geometry(self, X, start, end):
         """Update the geometry of a segment of the path, then set the corresponding internal
@@ -86,8 +99,7 @@ class Geodesic(object):
     def compute_disps(self, start=1, end=-1, dx=None, friction=1e-3):
         """Compute displacement vectors and total length between two images.
         Only recalculate internal coordinates if they are unknown."""
-        if end < 0:
-            end += self.nimages
+        start, end = self._resolve_segment(start, end)
         self.update_intc()
         # Calculate displacement vectors in each segment, and the total length
         vecs_l = [wm - wl for wl, wm in zip(self.w[start - 1:end], self.w_mid[start - 1:end])]
@@ -103,34 +115,46 @@ class Geodesic(object):
     def compute_disp_grad(self, start, end, friction=1e-3):
         """Compute derivatives of the displacement vectors with respect to the Cartesian coordinates"""
         # Calculate derivatives of displacement vectors with respect to image Cartesians
+        start, end = self._resolve_segment(start, end)
         l = end - start + 1
-        self.grad = np.zeros((l * 2 * self.nrij + 3 * (end - start) * self.natoms, (end - start) * 3 * self.natoms))
-        self.grad0 = self.grad[:l * 2 * self.nrij]
-        grad_shape = (l, self.nrij, end - start, 3 * self.natoms)
-        grad_l = self.grad[:l * self.nrij].reshape(grad_shape)
-        grad_r = self.grad[l * self.nrij:l * self.nrij * 2].reshape(grad_shape)
+        m = end - start
+        blocks = [[None] * m for _ in range(l * 2 + m)]
+        ncoords = 3 * self.natoms
+        if friction:
+            friction_block = sparse.eye(ncoords, format='csr') * friction
+        else:
+            friction_block = sparse.csr_matrix((ncoords, ncoords))
         for i, image in enumerate(range(start, end)):
-            dmid1 = self.dwdR_mid[image - 1] / 2
-            dmid2 = self.dwdR_mid[image] / 2
-            grad_l[i + 1, :, i, :] = dmid2 - self.dwdR[image]
-            grad_l[i, :, i, :] = dmid1
-            grad_r[i + 1, :, i, :] = -dmid2
-            grad_r[i, :, i, :] = self.dwdR[image] - dmid1
-        for idx in range((end - start) * 3 * self.natoms):
-            self.grad[l * self.nrij * 2 + idx, idx] = friction
+            dmid1 = self.dwdR_mid[image - 1] * 0.5
+            dmid2 = self.dwdR_mid[image] * 0.5
+            blocks[i + 1][i] = dmid2 - self.dwdR[image]
+            blocks[i][i] = dmid1
+            blocks[l + i + 1][i] = -dmid2
+            blocks[l + i][i] = self.dwdR[image] - dmid1
+            blocks[l * 2 + i][i] = friction_block
+        self.grad = sparse.bmat(blocks, format='csr')
+        self.grad0 = self.grad[:l * 2 * self.nrij]
 
     def compute_target_func(self, X=None, start=1, end=-1, log_level=logging.INFO, x0=None, friction=1e-3):
         """Compute the vectorized target function, which is then used for least
         squares minimization."""
-        if end < 0:
-            end += self.nimages
-        if X is not None and not self.update_geometry(X, start, end) and self.segment == (start, end):
+        start, end = self._resolve_segment(start, end)
+        x0_array = None if x0 is None else np.asarray(x0).ravel()
+        same_geometry = X is not None and not self.update_geometry(X, start, end)
+        same_x0 = (x0_array is None and self._target_x0 is None) or (
+            x0_array is not None and self._target_x0 is not None and
+            np.array_equal(x0_array, self._target_x0))
+        if (same_geometry and self.segment == (start, end) and
+                friction == self._target_friction and same_x0):
             return
         self.segment = start, end
-        dx = np.zeros(self.path[start:end].size) if x0 is None else self.path[start:end].ravel() - x0.ravel()
+        self._target_friction = friction
+        self._target_x0 = None if x0_array is None else x0_array.copy()
+        dx = (np.zeros(self.path[start:end].size) if x0_array is None
+              else self.path[start:end].ravel() - x0_array)
         self.compute_disps(start, end, dx=dx, friction=friction)
         self.compute_disp_grad(start, end, friction=friction)
-        self.optimality = np.linalg.norm(np.einsum('i,i...', self.disps, self.grad), ord=np.inf)
+        self.optimality = np.linalg.norm((self.grad.T @ self.disps).ravel(), ord=np.inf)
         logger.log(log_level, "  Iteration %3d: Length %10.3f |dL|=%7.3e", self.neval, self.length, self.optimality)
         self.conv_path.append(self.path[1].copy())
         self.neval += 1
@@ -142,8 +166,12 @@ class Geodesic(object):
         return self.disps
 
     def target_deriv(self, X, **kwargs):
-        """Wrapper around `compute_target_func` to prevent repeated evaluation at
-        the same geometry"""
+        """Dense Jacobian wrapper kept for compatibility with external callers."""
+        self.compute_target_func(X, **kwargs)
+        return self.grad.toarray()
+
+    def target_deriv_sparse(self, X, **kwargs):
+        """Sparse Jacobian wrapper used by the internal least-squares optimizer."""
         self.compute_target_func(X, **kwargs)
         return self.grad
 
@@ -162,6 +190,7 @@ class Geodesic(object):
         Returns:
             The optimized path.  This is also stored in self.path
         """
+        start, end = self._resolve_segment(start, end)
         X0 = np.array(self.path[start:end]).ravel()
         if xref is None:
             xref= X0
@@ -173,7 +202,7 @@ class Geodesic(object):
         kwargs = dict(start=start, end=end, log_level=log_level, x0=xref, friction=friction)
         self.compute_target_func(**kwargs)  # Compute length and optimality
         if self.optimality > tol:
-            result = least_squares(self.target_func, X0, self.target_deriv, ftol=tol, gtol=tol,
+            result = least_squares(self.target_func, X0, self.target_deriv_sparse, ftol=tol, gtol=tol,
                                    max_nfev=max_iter, kwargs=kwargs, loss='soft_l1')
             self.update_geometry(result['x'], start, end)
             logger.log(log_level, "Smoothing converged after %d iterations", result['nfev'])
@@ -199,8 +228,7 @@ class Geodesic(object):
         Returns:
             The optimized path.  This is also stored in self.path
         """
-        if end < 0:
-            end = self.nimages + end
+        start, end = self._resolve_segment(start, end)
         self.neval = 0
         images = range(start, end)
         logger.info("  Degree of freedoms %6d: ", (end - start) * 3 * self.natoms)
