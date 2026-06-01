@@ -89,10 +89,10 @@ def get_bond_list(geom, atoms=None, threshold=4, min_neighbors=4, snapshots=30, 
     # Get neighbor list for included geometry and merge them
     rijset = set(enforce)
     for image in images:
-        tree = KDTree(geom[image])
-        pairs = tree.query_pairs(threshold)
+        image_tree = KDTree(geom[image])
+        pairs = image_tree.query_pairs(threshold)
         rijset.update(pairs)
-        bonded = tree.query_pairs(bond_threshold)
+        bonded = image_tree.query_pairs(bond_threshold)
         neighbors = {i: {i} for i in range(geom.shape[1])}
         for i, j in bonded:
             neighbors[i].add(j)
@@ -110,9 +110,11 @@ def get_bond_list(geom, atoms=None, threshold=4, min_neighbors=4, snapshots=30, 
     for i, j in rijlist:
         count[i] += 1
         count[j] += 1
+    final_geom = geom[-1]
+    final_tree = KDTree(final_geom)
     for idx, ct in enumerate(count):
         if ct < min_neighbors:
-            _, neighbors = tree.query(geom[-1, idx], k=min_neighbors + 1)
+            _, neighbors = final_tree.query(final_geom[idx], k=min_neighbors + 1)
             for i in neighbors:
                 if i == idx:
                     continue
