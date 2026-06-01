@@ -39,6 +39,7 @@ def main():
     ps.add_argument("--maxiter", default=15, type=int, help="Maximum number of minimization iterations")
     ps.add_argument("--microiter", default=20, type=int, help="Maximum number of micro iterations for "
                     "sweeping algorithm.")
+    ps.add_argument("--seed", default=None, type=int, help="Random seed for reproducible results.")
     ps.add_argument("--scaling", default=1.7, type=float, help="Exponential parameter for morse potential")
     ps.add_argument("--friction", default=1e-2, type=float, help="Size of friction term used to prevent "
                     "very large change of geometry.")
@@ -52,6 +53,10 @@ def main():
 
     # Setup logging based on designated logging level
     logging.basicConfig(format="[%(module)-12s]%(message)s", level=args.logging)
+    
+    logger.info('Seed: %s', args.seed)
+    
+    np.random.seed(args.seed)
 
     # Read the initial geometries.
     symbols, X = read_xyz(args.filename)
