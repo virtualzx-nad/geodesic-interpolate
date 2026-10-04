@@ -17,16 +17,17 @@ import json
 import logging
 import os
 from pathlib import Path
-import resource
 import statistics
 import subprocess
 import sys
 import time
 
-# Set before importing NumPy/SciPy, including when this file is used as a worker.
-for _name in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
-              "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
-    os.environ[_name] = "1"
+# Set before importing NumPy/SciPy in workers, without altering the environment
+# of unit tests which import only the independent numerical evaluator.
+if __name__ == "__main__":
+    for _name in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
+                  "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
+        os.environ[_name] = "1"
 
 import numpy as np
 
@@ -128,6 +129,8 @@ def independent_clearance(path, pairs, atoms, radii):
 
 
 def _worker(args):
+    import resource
+
     source = Path(args.source).resolve()
     sys.path.insert(0, str(source))
     source_hash = hashlib.sha256()

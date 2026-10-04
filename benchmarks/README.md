@@ -13,7 +13,7 @@ From the repository root, with NumPy and SciPy installed:
 
 ```sh
 python benchmarks/validate_smoothing.py --cases methane --output /tmp/methane.json
-python benchmarks/validate_smoothing.py --cases trp --output /tmp/trp.json
+python benchmarks/validate_smoothing.py --cases trp collagen calcium --output /tmp/proteins.json
 python -m unittest discover -v
 ```
 
@@ -43,13 +43,14 @@ Measured on macOS arm64, Python 3.12.14, NumPy 2.4.6, SciPy 1.17.1.
 
 | Case | Method | Median time (s) | Median peak RSS (MiB) | Independent gradient infinity norm | Reached 0.002? |
 | --- | --- | ---: | ---: | ---: | --- |
-| Methane, 6 atoms | Global | 0.0861 | 76.9 | 0.001819606 | Yes |
-| Methane, 6 atoms | Sweep | 0.1034 | 76.3 | 0.001858107 | Yes |
+| Methane, 6 atoms | Global | 0.0821 | 76.5 | 0.001819606 | Yes |
+| Methane, 6 atoms | Sweep | 0.1035 | 76.3 | 0.001858107 | Yes |
 | Trp-cage, 284 atoms | Global | 6.0344 | 136.8 | 0.001997985 | Yes |
 | Trp-cage, 284 atoms | Sweep | 28.9495 | 142.6 | 0.011602299 | No |
 | Collagen, 460 atoms | Global | 8.3651 | 136.7 | 0.001270873 | Yes |
 | Collagen, 460 atoms | Sweep | 29.2495 | 141.7 | 0.001624931 | Yes |
 | Calcium binding, 600 atoms | Global | 9.5947 | 170.6 | 0.003537610 | No |
+| Calcium binding, 600 atoms | Sweep | 35.6805 | 175.3 | 0.017556690 | No |
 
 Methane uses the same selected atom pairs, seed, initial path, and fixed
 endpoints for both methods. Both reported final lengths agree exactly with
@@ -61,10 +62,31 @@ On Trp-cage, global smoothing reaches the common threshold within its budget,
 while sweeping does not reach it after 35 sweeps. Their times therefore cannot
 be compared as time to the same convergence threshold. This documents the
 remaining sweep convergence limit instead of claiming comparable convergence.
-Both collagen methods reach the common threshold. Calcium global smoothing
-exhausts its 50-evaluation budget above the threshold. These results are for
+Both collagen methods reach the common threshold. Neither calcium method
+reaches the threshold within its evaluation or sweep budget. These results are for
 the specified input paths and budgets, not a guarantee of convergence for other
-molecules or initial paths.
+molecules or initial paths. The complete per-run measurements are in
+[results/proteins.json](results/proteins.json).
+
+Every protein run preserves its prepared endpoints exactly. Independent final
+lengths agree with the reported values within `2e-15`, and independently
+calculated gradients agree within `2e-16`, including for runs which exhaust
+their budgets. Both collagen and calcium methods have zero independently
+detected omitted-pair overlap violations at the sampled locations.
+Calcium sweeping finishes only `5.2e-13` Angstrom above the closest omitted-pair
+threshold. This documents proximity to the guard boundary; it is not evidence
+that the unconstrained gradient tolerance was attained.
+
+A final-code rerun confirms unchanged methane and Trp-cage global gradients,
+lengths, and fixed endpoints after the SciPy compatibility adjustment. The
+single Trp-cage recheck independently found zero omitted-pair violations at
+images and arithmetic midpoints; its records are in
+[results/final-code-trp.json](results/final-code-trp.json). The timing table uses
+the three-sample medians, not this single verification timing.
+
+Midpoint interpolation has a separate [matched-objective comparison](MIDPOINT.md)
+with baseline timings, callback counts, independent gradients, and overlap
+checks for its two endpoint-biased starting guesses.
 
 ### Baseline limitation
 
@@ -93,9 +115,10 @@ stored entries require **12,988,708 bytes** in CSR form (data, indices, and row
 pointers); the corresponding dense matrix would require **25,344,576,000 bytes**.
 Cached image/midpoint coordinate Jacobians add 7,080,216 bytes, and the reusable
 assembly layout adds 12,988,708 bytes. The compatibility `grad0` matrix, a CSR
-copy without the friction rows, adds 12,556,708 bytes. These figures describe specific arrays,
-not total process peak memory; no dense equivalent was allocated. The measured
-values are in [results/calcium-memory.json](results/calcium-memory.json).
+copy without the friction rows, adds 12,556,708 bytes. These figures describe
+specific arrays, not total process peak memory; no dense equivalent was
+allocated. The measured values are in
+[results/calcium-memory.json](results/calcium-memory.json).
 
 The memory calculation constructs `Geodesic` from
 `test_cases/calcium_binding_interpolated.xyz`, seeds NumPy with 0, and calls
@@ -131,10 +154,14 @@ initial-path rejection, rejected-trial restoration, and Cartesian midpoints.
 All 56 unit tests pass in both tested environments: Python 3.12.14 with NumPy
 2.4.6/SciPy 1.17.1, and Python 3.9.6 with NumPy 2.0.2/SciPy 1.13.1. Budget
 exhaustion is explicitly tested to emit a nonconvergence warning.
+The [GitHub Actions matrix run](https://github.com/virtualzx-nad/geodesic-interpolate/actions/runs/37219675842)
+also passed all five Python versions (3.8 through 3.12) on implementation commit
+`dbf4799`.
 
 The benchmark also independently enumerates all atom pairs at final images and
 the arithmetic midpoints, records the closest pairs, and checks omitted-pair
 clearance against the specified thresholds. This is a check at sampled
-locations. It does not establish safety throughout the continuous path between
+locations, with minimum distance `max(0.70 Angstrom, 0.60 * sum of covalent radii)`
+for omitted pairs. It does not establish safety throughout the continuous path between
 them. Failure to reach the requested gradient threshold is reported, rather
 than being interpreted as convergence from a shorter path or solver status.

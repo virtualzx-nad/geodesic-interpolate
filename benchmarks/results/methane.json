@@ -8,8 +8,8 @@
     "seed": 0,
     "tol": 0.002,
     "friction": 0.001,
-    "time_s": 0.08607162500265986,
-    "peak_rss_mib": 76.875,
+    "time_s": 0.0821138329920359,
+    "peak_rss_mib": 76.453125,
     "initial_length": 1.2782756967825146,
     "length": 1.241201150316995,
     "initial_objective": 0.05057315338984547,
@@ -26,6 +26,11 @@
     "python": "3.12.14",
     "numpy": "2.4.6",
     "scipy": "1.17.1",
+    "source_digest": "832f3f309dd9615cb8fe68c31bb79fcf71759b1ad373673eb6d4af7248f3b610",
+    "closest_output_pair_angstrom": 0.7428299501856573,
+    "closest_midpoint_pair_angstrom": 0.7597309973728193,
+    "omitted_pair_clearance_angstrom": null,
+    "overlap_violations": 0,
     "samples": [
       {
         "case": "methane",
@@ -36,8 +41,8 @@
         "seed": 0,
         "tol": 0.002,
         "friction": 0.001,
-        "time_s": 0.08607162500265986,
-        "peak_rss_mib": 76.703125,
+        "time_s": 0.08389399998122826,
+        "peak_rss_mib": 76.453125,
         "initial_length": 1.2782756967825146,
         "length": 1.241201150316995,
         "initial_objective": 0.05057315338984547,
@@ -53,7 +58,12 @@
         "target_evaluations": 29,
         "python": "3.12.14",
         "numpy": "2.4.6",
-        "scipy": "1.17.1"
+        "scipy": "1.17.1",
+        "source_digest": "832f3f309dd9615cb8fe68c31bb79fcf71759b1ad373673eb6d4af7248f3b610",
+        "closest_output_pair_angstrom": 0.7428299501856573,
+        "closest_midpoint_pair_angstrom": 0.7597309973728193,
+        "omitted_pair_clearance_angstrom": null,
+        "overlap_violations": 0
       },
       {
         "case": "methane",
@@ -64,8 +74,8 @@
         "seed": 0,
         "tol": 0.002,
         "friction": 0.001,
-        "time_s": 0.08213858399540186,
-        "peak_rss_mib": 77.203125,
+        "time_s": 0.0821138329920359,
+        "peak_rss_mib": 76.4375,
         "initial_length": 1.2782756967825146,
         "length": 1.241201150316995,
         "initial_objective": 0.05057315338984547,
@@ -81,7 +91,12 @@
         "target_evaluations": 29,
         "python": "3.12.14",
         "numpy": "2.4.6",
-        "scipy": "1.17.1"
+        "scipy": "1.17.1",
+        "source_digest": "832f3f309dd9615cb8fe68c31bb79fcf71759b1ad373673eb6d4af7248f3b610",
+        "closest_output_pair_angstrom": 0.7428299501856573,
+        "closest_midpoint_pair_angstrom": 0.7597309973728193,
+        "omitted_pair_clearance_angstrom": null,
+        "overlap_violations": 0
       },
       {
         "case": "methane",
@@ -92,8 +107,8 @@
         "seed": 0,
         "tol": 0.002,
         "friction": 0.001,
-        "time_s": 0.1051052919938229,
-        "peak_rss_mib": 76.875,
+        "time_s": 0.08098141703521833,
+        "peak_rss_mib": 76.59375,
         "initial_length": 1.2782756967825146,
         "length": 1.241201150316995,
         "initial_objective": 0.05057315338984547,
@@ -109,7 +124,12 @@
         "target_evaluations": 29,
         "python": "3.12.14",
         "numpy": "2.4.6",
-        "scipy": "1.17.1"
+        "scipy": "1.17.1",
+        "source_digest": "832f3f309dd9615cb8fe68c31bb79fcf71759b1ad373673eb6d4af7248f3b610",
+        "closest_output_pair_angstrom": 0.7428299501856573,
+        "closest_midpoint_pair_angstrom": 0.7597309973728193,
+        "omitted_pair_clearance_angstrom": null,
+        "overlap_violations": 0
       }
     ]
   },
@@ -122,8 +142,8 @@
     "seed": 0,
     "tol": 0.002,
     "friction": 0.001,
-    "time_s": 0.1034250829834491,
-    "peak_rss_mib": 76.328125,
+    "time_s": 0.10346800001570955,
+    "peak_rss_mib": 76.296875,
     "initial_length": 1.2782756967825146,
     "length": 1.2425501272411899,
     "initial_objective": 0.05057315338984547,
@@ -140,6 +160,11 @@
     "python": "3.12.14",
     "numpy": "2.4.6",
     "scipy": "1.17.1",
+    "source_digest": "832f3f309dd9615cb8fe68c31bb79fcf71759b1ad373673eb6d4af7248f3b610",
+    "closest_output_pair_angstrom": 0.7428299501856573,
+    "closest_midpoint_pair_angstrom": 0.7625216455617454,
+    "omitted_pair_clearance_angstrom": null,
+    "overlap_violations": 0,
     "samples": [
       {
         "case": "methane",
@@ -150,8 +175,8 @@
         "seed": 0,
         "tol": 0.002,
         "friction": 0.001,
-        "time_s": 0.11907662503654137,
-        "peak_rss_mib": 77.375,
+        "time_s": 0.10346800001570955,
+        "peak_rss_mib": 76.25,
         "initial_length": 1.2782756967825146,
         "length": 1.2425501272411899,
         "initial_objective": 0.05057315338984547,
@@ -167,7 +192,12 @@
         "target_evaluations": 422,
         "python": "3.12.14",
         "numpy": "2.4.6",
-        "scipy": "1.17.1"
+        "scipy": "1.17.1",
+        "source_digest": "832f3f309dd9615cb8fe68c31bb79fcf71759b1ad373673eb6d4af7248f3b610",
+        "closest_output_pair_angstrom": 0.7428299501856573,
+        "closest_midpoint_pair_angstrom": 0.7625216455617454,
+        "omitted_pair_clearance_angstrom": null,
+        "overlap_violations": 0
       },
       {
         "case": "methane",
@@ -178,8 +208,8 @@
         "seed": 0,
         "tol": 0.002,
         "friction": 0.001,
-        "time_s": 0.10120000003371388,
-        "peak_rss_mib": 76.328125,
+        "time_s": 0.10385854099877179,
+        "peak_rss_mib": 76.4375,
         "initial_length": 1.2782756967825146,
         "length": 1.2425501272411899,
         "initial_objective": 0.05057315338984547,
@@ -195,7 +225,12 @@
         "target_evaluations": 422,
         "python": "3.12.14",
         "numpy": "2.4.6",
-        "scipy": "1.17.1"
+        "scipy": "1.17.1",
+        "source_digest": "832f3f309dd9615cb8fe68c31bb79fcf71759b1ad373673eb6d4af7248f3b610",
+        "closest_output_pair_angstrom": 0.7428299501856573,
+        "closest_midpoint_pair_angstrom": 0.7625216455617454,
+        "omitted_pair_clearance_angstrom": null,
+        "overlap_violations": 0
       },
       {
         "case": "methane",
@@ -206,8 +241,8 @@
         "seed": 0,
         "tol": 0.002,
         "friction": 0.001,
-        "time_s": 0.1034250829834491,
-        "peak_rss_mib": 75.953125,
+        "time_s": 0.10272399999666959,
+        "peak_rss_mib": 76.296875,
         "initial_length": 1.2782756967825146,
         "length": 1.2425501272411899,
         "initial_objective": 0.05057315338984547,
@@ -223,7 +258,12 @@
         "target_evaluations": 422,
         "python": "3.12.14",
         "numpy": "2.4.6",
-        "scipy": "1.17.1"
+        "scipy": "1.17.1",
+        "source_digest": "832f3f309dd9615cb8fe68c31bb79fcf71759b1ad373673eb6d4af7248f3b610",
+        "closest_output_pair_angstrom": 0.7428299501856573,
+        "closest_midpoint_pair_angstrom": 0.7625216455617454,
+        "omitted_pair_clearance_angstrom": null,
+        "overlap_violations": 0
       }
     ]
   }

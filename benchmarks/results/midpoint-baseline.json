@@ -1,0 +1,310 @@
+[
+  {
+    "case": "methane",
+    "atoms": 6,
+    "seed": 0,
+    "tol": 0.01,
+    "time_s": 0.003052750020287931,
+    "peak_rss_mib": 74.859375,
+    "trials": [
+      {
+        "gradient_inf": 0.0035425515944074405,
+        "objective": 0.0025651844303934126,
+        "pair_digest": "5df9b84954675173803141a20b21cb6a5662c316c80b01ccf43a59bbaaae0329",
+        "pairs": 15,
+        "nfev": 4,
+        "start_digest": "3411323bd1cb7ef76321b7821e0a480a9483753653ab41967b76a655be255ccd",
+        "reached_tolerance": true
+      },
+      {
+        "gradient_inf": 0.00772270081343742,
+        "objective": 0.002070167552668626,
+        "pair_digest": "5df9b84954675173803141a20b21cb6a5662c316c80b01ccf43a59bbaaae0329",
+        "pairs": 15,
+        "nfev": 3,
+        "start_digest": "dcb12267a89137178aa720dd76caa76678f1913eebcd6e82a5be98fab1bb6cd0",
+        "reached_tolerance": true
+      }
+    ],
+    "endpoint_digest": "8e77e8db38036273af8d740c0aa517c7776f584317989ee2a390e3a26d68bb23",
+    "endpoint_error": 0.0,
+    "finite": true,
+    "python": "3.12.14",
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "closest_output_pair_angstrom": 0.7428299501851947,
+    "closest_midpoint_pair_angstrom": 1.0118574827295106,
+    "omitted_pair_clearance_angstrom": null,
+    "overlap_violations": 0,
+    "samples": [
+      {
+        "case": "methane",
+        "atoms": 6,
+        "seed": 0,
+        "tol": 0.01,
+        "time_s": 0.003052750020287931,
+        "peak_rss_mib": 75.03125,
+        "trials": [
+          {
+            "gradient_inf": 0.0035425515944074405,
+            "objective": 0.0025651844303934126,
+            "pair_digest": "5df9b84954675173803141a20b21cb6a5662c316c80b01ccf43a59bbaaae0329",
+            "pairs": 15,
+            "nfev": 4,
+            "start_digest": "3411323bd1cb7ef76321b7821e0a480a9483753653ab41967b76a655be255ccd",
+            "reached_tolerance": true
+          },
+          {
+            "gradient_inf": 0.00772270081343742,
+            "objective": 0.002070167552668626,
+            "pair_digest": "5df9b84954675173803141a20b21cb6a5662c316c80b01ccf43a59bbaaae0329",
+            "pairs": 15,
+            "nfev": 3,
+            "start_digest": "dcb12267a89137178aa720dd76caa76678f1913eebcd6e82a5be98fab1bb6cd0",
+            "reached_tolerance": true
+          }
+        ],
+        "endpoint_digest": "8e77e8db38036273af8d740c0aa517c7776f584317989ee2a390e3a26d68bb23",
+        "endpoint_error": 0.0,
+        "finite": true,
+        "python": "3.12.14",
+        "numpy": "2.4.6",
+        "scipy": "1.17.1",
+        "closest_output_pair_angstrom": 0.7428299501851947,
+        "closest_midpoint_pair_angstrom": 1.0118574827295106,
+        "omitted_pair_clearance_angstrom": null,
+        "overlap_violations": 0
+      },
+      {
+        "case": "methane",
+        "atoms": 6,
+        "seed": 0,
+        "tol": 0.01,
+        "time_s": 0.0029141249833628535,
+        "peak_rss_mib": 74.859375,
+        "trials": [
+          {
+            "gradient_inf": 0.0035425515944074405,
+            "objective": 0.0025651844303934126,
+            "pair_digest": "5df9b84954675173803141a20b21cb6a5662c316c80b01ccf43a59bbaaae0329",
+            "pairs": 15,
+            "nfev": 4,
+            "start_digest": "3411323bd1cb7ef76321b7821e0a480a9483753653ab41967b76a655be255ccd",
+            "reached_tolerance": true
+          },
+          {
+            "gradient_inf": 0.00772270081343742,
+            "objective": 0.002070167552668626,
+            "pair_digest": "5df9b84954675173803141a20b21cb6a5662c316c80b01ccf43a59bbaaae0329",
+            "pairs": 15,
+            "nfev": 3,
+            "start_digest": "dcb12267a89137178aa720dd76caa76678f1913eebcd6e82a5be98fab1bb6cd0",
+            "reached_tolerance": true
+          }
+        ],
+        "endpoint_digest": "8e77e8db38036273af8d740c0aa517c7776f584317989ee2a390e3a26d68bb23",
+        "endpoint_error": 0.0,
+        "finite": true,
+        "python": "3.12.14",
+        "numpy": "2.4.6",
+        "scipy": "1.17.1",
+        "closest_output_pair_angstrom": 0.7428299501851947,
+        "closest_midpoint_pair_angstrom": 1.0118574827295106,
+        "omitted_pair_clearance_angstrom": null,
+        "overlap_violations": 0
+      },
+      {
+        "case": "methane",
+        "atoms": 6,
+        "seed": 0,
+        "tol": 0.01,
+        "time_s": 0.003135874983854592,
+        "peak_rss_mib": 74.828125,
+        "trials": [
+          {
+            "gradient_inf": 0.0035425515944074405,
+            "objective": 0.0025651844303934126,
+            "pair_digest": "5df9b84954675173803141a20b21cb6a5662c316c80b01ccf43a59bbaaae0329",
+            "pairs": 15,
+            "nfev": 4,
+            "start_digest": "3411323bd1cb7ef76321b7821e0a480a9483753653ab41967b76a655be255ccd",
+            "reached_tolerance": true
+          },
+          {
+            "gradient_inf": 0.00772270081343742,
+            "objective": 0.002070167552668626,
+            "pair_digest": "5df9b84954675173803141a20b21cb6a5662c316c80b01ccf43a59bbaaae0329",
+            "pairs": 15,
+            "nfev": 3,
+            "start_digest": "dcb12267a89137178aa720dd76caa76678f1913eebcd6e82a5be98fab1bb6cd0",
+            "reached_tolerance": true
+          }
+        ],
+        "endpoint_digest": "8e77e8db38036273af8d740c0aa517c7776f584317989ee2a390e3a26d68bb23",
+        "endpoint_error": 0.0,
+        "finite": true,
+        "python": "3.12.14",
+        "numpy": "2.4.6",
+        "scipy": "1.17.1",
+        "closest_output_pair_angstrom": 0.7428299501851947,
+        "closest_midpoint_pair_angstrom": 1.0118574827295106,
+        "omitted_pair_clearance_angstrom": null,
+        "overlap_violations": 0
+      }
+    ]
+  },
+  {
+    "case": "diels",
+    "atoms": 31,
+    "seed": 0,
+    "tol": 0.01,
+    "time_s": 0.04948166699614376,
+    "peak_rss_mib": 79.28125,
+    "trials": [
+      {
+        "gradient_inf": 0.006594995133990303,
+        "objective": 0.027766085480098006,
+        "pair_digest": "097e66ef61983ae26252437f1679a219e3f22554b79c1a4246494ef2839f927c",
+        "pairs": 284,
+        "nfev": 5,
+        "start_digest": "db5141e3ad37c7675eb3eb40a2c7a5e2085e9956b5425c774798c1fa11debb4f",
+        "reached_tolerance": true
+      },
+      {
+        "gradient_inf": 0.0012044629790554748,
+        "objective": 0.05360233347091059,
+        "pair_digest": "097e66ef61983ae26252437f1679a219e3f22554b79c1a4246494ef2839f927c",
+        "pairs": 284,
+        "nfev": 10,
+        "start_digest": "19b9a5fe891d44db0ed57fbb4712f8b2b4285ccc2986ec84d50131f03655adff",
+        "reached_tolerance": true
+      }
+    ],
+    "endpoint_digest": "36d7956a4cf953bad7433f1886dd96d7bb0c704eda10add73770eddb8cfba3b5",
+    "endpoint_error": 0.0,
+    "finite": true,
+    "python": "3.12.14",
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "closest_output_pair_angstrom": 1.0728698217460395,
+    "closest_midpoint_pair_angstrom": 0.5435768870180748,
+    "omitted_pair_clearance_angstrom": 0.7905463060309503,
+    "overlap_violations": 0,
+    "samples": [
+      {
+        "case": "diels",
+        "atoms": 31,
+        "seed": 0,
+        "tol": 0.01,
+        "time_s": 0.04948166699614376,
+        "peak_rss_mib": 78.21875,
+        "trials": [
+          {
+            "gradient_inf": 0.006594995133990303,
+            "objective": 0.027766085480098006,
+            "pair_digest": "097e66ef61983ae26252437f1679a219e3f22554b79c1a4246494ef2839f927c",
+            "pairs": 284,
+            "nfev": 5,
+            "start_digest": "db5141e3ad37c7675eb3eb40a2c7a5e2085e9956b5425c774798c1fa11debb4f",
+            "reached_tolerance": true
+          },
+          {
+            "gradient_inf": 0.0012044629790554748,
+            "objective": 0.05360233347091059,
+            "pair_digest": "097e66ef61983ae26252437f1679a219e3f22554b79c1a4246494ef2839f927c",
+            "pairs": 284,
+            "nfev": 10,
+            "start_digest": "19b9a5fe891d44db0ed57fbb4712f8b2b4285ccc2986ec84d50131f03655adff",
+            "reached_tolerance": true
+          }
+        ],
+        "endpoint_digest": "36d7956a4cf953bad7433f1886dd96d7bb0c704eda10add73770eddb8cfba3b5",
+        "endpoint_error": 0.0,
+        "finite": true,
+        "python": "3.12.14",
+        "numpy": "2.4.6",
+        "scipy": "1.17.1",
+        "closest_output_pair_angstrom": 1.0728698217460395,
+        "closest_midpoint_pair_angstrom": 0.5435768870180748,
+        "omitted_pair_clearance_angstrom": 0.7905463060309503,
+        "overlap_violations": 0
+      },
+      {
+        "case": "diels",
+        "atoms": 31,
+        "seed": 0,
+        "tol": 0.01,
+        "time_s": 0.0460403339820914,
+        "peak_rss_mib": 82.8125,
+        "trials": [
+          {
+            "gradient_inf": 0.006594995133990303,
+            "objective": 0.027766085480098006,
+            "pair_digest": "097e66ef61983ae26252437f1679a219e3f22554b79c1a4246494ef2839f927c",
+            "pairs": 284,
+            "nfev": 5,
+            "start_digest": "db5141e3ad37c7675eb3eb40a2c7a5e2085e9956b5425c774798c1fa11debb4f",
+            "reached_tolerance": true
+          },
+          {
+            "gradient_inf": 0.0012044629790554748,
+            "objective": 0.05360233347091059,
+            "pair_digest": "097e66ef61983ae26252437f1679a219e3f22554b79c1a4246494ef2839f927c",
+            "pairs": 284,
+            "nfev": 10,
+            "start_digest": "19b9a5fe891d44db0ed57fbb4712f8b2b4285ccc2986ec84d50131f03655adff",
+            "reached_tolerance": true
+          }
+        ],
+        "endpoint_digest": "36d7956a4cf953bad7433f1886dd96d7bb0c704eda10add73770eddb8cfba3b5",
+        "endpoint_error": 0.0,
+        "finite": true,
+        "python": "3.12.14",
+        "numpy": "2.4.6",
+        "scipy": "1.17.1",
+        "closest_output_pair_angstrom": 1.0728698217460395,
+        "closest_midpoint_pair_angstrom": 0.5435768870180748,
+        "omitted_pair_clearance_angstrom": 0.7905463060309503,
+        "overlap_violations": 0
+      },
+      {
+        "case": "diels",
+        "atoms": 31,
+        "seed": 0,
+        "tol": 0.01,
+        "time_s": 0.05100699997274205,
+        "peak_rss_mib": 79.28125,
+        "trials": [
+          {
+            "gradient_inf": 0.006594995133990303,
+            "objective": 0.027766085480098006,
+            "pair_digest": "097e66ef61983ae26252437f1679a219e3f22554b79c1a4246494ef2839f927c",
+            "pairs": 284,
+            "nfev": 5,
+            "start_digest": "db5141e3ad37c7675eb3eb40a2c7a5e2085e9956b5425c774798c1fa11debb4f",
+            "reached_tolerance": true
+          },
+          {
+            "gradient_inf": 0.0012044629790554748,
+            "objective": 0.05360233347091059,
+            "pair_digest": "097e66ef61983ae26252437f1679a219e3f22554b79c1a4246494ef2839f927c",
+            "pairs": 284,
+            "nfev": 10,
+            "start_digest": "19b9a5fe891d44db0ed57fbb4712f8b2b4285ccc2986ec84d50131f03655adff",
+            "reached_tolerance": true
+          }
+        ],
+        "endpoint_digest": "36d7956a4cf953bad7433f1886dd96d7bb0c704eda10add73770eddb8cfba3b5",
+        "endpoint_error": 0.0,
+        "finite": true,
+        "python": "3.12.14",
+        "numpy": "2.4.6",
+        "scipy": "1.17.1",
+        "closest_output_pair_angstrom": 1.0728698217460395,
+        "closest_midpoint_pair_angstrom": 0.5435768870180748,
+        "omitted_pair_clearance_angstrom": 0.7905463060309503,
+        "overlap_violations": 0
+      }
+    ]
+  }
+]
