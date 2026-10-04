@@ -1,0 +1,15 @@
+{
+  "images": 17,
+  "atoms": 600,
+  "pairs": 2823,
+  "shape": [
+    117336,
+    27000
+  ],
+  "nnz": 1043280,
+  "jacobian_bytes": 12988708,
+  "dense_equivalent_bytes": 25344576000,
+  "cached_coordinate_bytes": 7080216,
+  "cached_layout_bytes": 12988708,
+  "compatibility_grad0_bytes": 12556708
+}

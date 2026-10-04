@@ -3,13 +3,15 @@ metric to find geodesics directly in Cartesian, to avoid feasibility problems as
 with redundant internals.
 """
 import logging
+from numbers import Real
 
 import numpy as np
 from scipy import sparse
 from scipy.optimize import least_squares
 
 from .coord_utils import (
-    align_path, compute_wij, compute_wij_sparse, get_bond_list, morse_scaler)
+    align_path, PairCoordinates, get_bond_list, morse_scaler)
+from .validation import OverlapChecker, UnsafePathError
 
 
 logger = logging.getLogger(__name__)
@@ -19,7 +21,7 @@ class Geodesic(object):
     """Optimizer to obtain geodesic in redundant internal coordinates.  Core part is the calculation
     of the path length in the internal metric."""
     def __init__(self, atoms, path, scaler=1.7, threshold=3.0, min_neighbors=4, log_level=logging.INFO,
-                 friction=1e-3):
+                 friction=1e-3, align=True):
         """Initialize the interpolater
         Args:
             atoms:      Atom symbols, used to lookup radii
@@ -34,19 +36,30 @@ class Geodesic(object):
             log_level:  Logging level to use.
             friction:   Friction term in the target function which regularizes the optimization step
                         size to prevent explosion.
+            align:      Align the input once. Set False for an already prepared path.
         """
-        rmsd0, self.path = align_path(path)
-        logger.log(log_level, "Maximum RMSD change in initial path: %10.2f", rmsd0)
-        if self.path.ndim != 3:
-            raise ValueError('The path to be interpolated must have 3 dimensions')
+        path = np.array(path, dtype=float, copy=True)
+        if path.ndim != 3 or path.shape[2] != 3 or min(path.shape[:2]) < 1:
+            raise ValueError('The path must have shape (nimages, natoms, 3)')
+        if not np.isfinite(path).all():
+            raise UnsafePathError('The path must contain only finite coordinates')
+        if align:
+            rmsd0, path = align_path(path)
+            logger.log(log_level, "Maximum RMSD change in initial path: %10.2f", rmsd0)
+        self.path = path
         self.nimages, self.natoms, _ = self.path.shape
         # Construct coordinates
-        self.rij_list, self.re = get_bond_list(path, atoms, threshold=threshold, min_neighbors=min_neighbors)
-        if isinstance(scaler, float):
-            self.scaler = morse_scaler(re=self.re, alpha=1.7)
+        self.rij_list, self.re = get_bond_list(self.path, atoms, threshold=threshold, min_neighbors=min_neighbors)
+        if isinstance(scaler, Real):
+            self.scaler = morse_scaler(re=self.re, alpha=scaler)
         else:
             self.scaler = scaler
         self.nrij = len(self.rij_list)
+        self.coordinates = PairCoordinates(self.natoms, self.rij_list)
+        self.overlap_checker = OverlapChecker(self.natoms, self.rij_list, atoms)
+        self._validate_path(self.path)
+        self._layouts = {}
+        self.rejected_trials = 0
         self.friction = friction
         # Initalize interal storages for mid points, internal coordinates and B matrices
         logger.log(log_level, "Performing geodesic smoothing")
@@ -78,22 +91,34 @@ class Geodesic(object):
         gradients of internal coordinates."""
         for i, (X, w, dwdR) in enumerate(zip(self.path, self.w, self.dwdR)):
             if w is None:
-                self.w[i], self.dwdR[i] = compute_wij_sparse(X, self.rij_list, self.scaler)
+                self.w[i], self.dwdR[i] = self.coordinates.compute(X, self.scaler)
         for i, (X0, X1, w) in enumerate(zip(self.path, self.path[1:], self.w_mid)):
             if w is None:
                 self.X_mid[i] = Xm = (X0 + X1) / 2
-                self.w_mid[i], self.dwdR_mid[i] = compute_wij_sparse(Xm, self.rij_list, self.scaler)
+                self.w_mid[i], self.dwdR_mid[i] = self.coordinates.compute(Xm, self.scaler)
+
+    def _validate_path(self, path, image_offset=0):
+        """Check sampled locations before changing any cached geometry."""
+        self.overlap_checker.validate(path, image_offset=image_offset)
+        pairs = self.coordinates.pairs
+        for geometry in list(path) + list((path[:-1] + path[1:]) * 0.5):
+            if np.any(np.all(geometry[pairs[:, 0]] == geometry[pairs[:, 1]], axis=1)):
+                raise UnsafePathError('Cannot evaluate coincident atoms in a selected pair')
 
     def update_geometry(self, X, start, end):
-        """Update the geometry of a segment of the path, then set the corresponding internal
-        coordinate, derivatives and midpoint locations to unknown"""
-        X = X.reshape(self.path[start:end].shape)
+        """Validate a trial, then update its geometry and invalidate affected caches."""
+        X = np.asarray(X).reshape(self.path[start:end].shape)
         if np.array_equal(X, self.path[start:end]):
             return False
+        candidate = self.path.copy()
+        candidate[start:end] = X
+        # Only these images and their adjoining midpoints can have changed.
+        self._validate_path(candidate[start - 1:end + 1], image_offset=start - 1)
         self.path[start:end] = X
         for i in range(start, end):
             self.w_mid[i] = self.w[i] = None
         self.w_mid[start - 1] = None
+        self.segment = None
         return True
 
     def compute_disps(self, start=1, end=-1, dx=None, friction=1e-3):
@@ -110,30 +135,47 @@ class Geodesic(object):
         else:
             trans = friction * dx  # Translation from initial geometry.  friction term 
         self.disps = np.concatenate(vecs_l + vecs_r + [trans])
-        self.disps0 = self.disps[:len(vecs_l) * 2]
+        self.disps0 = self.disps[:len(vecs_l) * 2 * self.nrij]
+
+    def _jacobian_layout(self, nimages, with_friction):
+        """Cache CSR assembly indices for the four blocks touching each image."""
+        key = nimages, with_friction
+        if key not in self._layouts:
+            ncoords = self.natoms * 3
+            nsegments = nimages + 1
+            pair_rows = np.repeat(np.arange(self.nrij), 6)
+            rows, cols = [], []
+            for i in range(nimages):
+                for block in (i + 1, i, nsegments + i + 1, nsegments + i):
+                    rows.append(pair_rows + block * self.nrij)
+                    cols.append(self.coordinates.indices + i * ncoords)
+            nvars = nimages * ncoords
+            nres = 2 * nsegments * self.nrij + nvars
+            if with_friction:
+                rows.append(2 * nsegments * self.nrij + np.arange(nvars))
+                cols.append(np.arange(nvars))
+            rows, cols = np.concatenate(rows), np.concatenate(cols)
+            # The template's values encode the permutation from block data to CSR.
+            template = sparse.coo_matrix((np.arange(len(rows)), (rows, cols)),
+                                         shape=(nres, nvars)).tocsr()
+            self._layouts[key] = (template.data, template.indices, template.indptr, template.shape)
+        return self._layouts[key]
 
     def compute_disp_grad(self, start, end, friction=1e-3):
-        """Compute derivatives of the displacement vectors with respect to the Cartesian coordinates"""
-        # Calculate derivatives of displacement vectors with respect to image Cartesians
+        """Assemble the local-support Jacobian using a reusable sparse layout."""
         start, end = self._resolve_segment(start, end)
-        l = end - start + 1
-        m = end - start
-        blocks = [[None] * m for _ in range(l * 2 + m)]
-        ncoords = 3 * self.natoms
+        self.update_intc()
+        data = []
+        for image in range(start, end):
+            dmid1 = self.dwdR_mid[image - 1].data * 0.5
+            dmid2 = self.dwdR_mid[image].data * 0.5
+            deriv = self.dwdR[image].data
+            data.extend((dmid2 - deriv, dmid1, -dmid2, deriv - dmid1))
         if friction:
-            friction_block = sparse.eye(ncoords, format='csr') * friction
-        else:
-            friction_block = sparse.csr_matrix((ncoords, ncoords))
-        for i, image in enumerate(range(start, end)):
-            dmid1 = self.dwdR_mid[image - 1] * 0.5
-            dmid2 = self.dwdR_mid[image] * 0.5
-            blocks[i + 1][i] = dmid2 - self.dwdR[image]
-            blocks[i][i] = dmid1
-            blocks[l + i + 1][i] = -dmid2
-            blocks[l + i][i] = self.dwdR[image] - dmid1
-            blocks[l * 2 + i][i] = friction_block
-        self.grad = sparse.bmat(blocks, format='csr')
-        self.grad0 = self.grad[:l * 2 * self.nrij]
+            data.append(np.full((end - start) * self.natoms * 3, friction))
+        order, indices, indptr, shape = self._jacobian_layout(end - start, bool(friction))
+        self.grad = sparse.csr_matrix((np.concatenate(data)[order], indices, indptr), shape=shape)
+        self.grad0 = self.grad[:(end - start + 1) * 2 * self.nrij]
 
     def compute_target_func(self, X=None, start=1, end=-1, log_level=logging.INFO, x0=None, friction=1e-3):
         """Compute the vectorized target function, which is then used for least
@@ -154,108 +196,124 @@ class Geodesic(object):
               else self.path[start:end].ravel() - x0_array)
         self.compute_disps(start, end, dx=dx, friction=friction)
         self.compute_disp_grad(start, end, friction=friction)
-        self.optimality = np.linalg.norm((self.grad.T @ self.disps).ravel(), ord=np.inf)
-        logger.log(log_level, "  Iteration %3d: Length %10.3f |dL|=%7.3e", self.neval, self.length, self.optimality)
+        weighted = self.disps / np.hypot(1, self.disps)
+        self.optimality = np.linalg.norm((self.grad.T @ weighted).ravel(), ord=np.inf)
+        # Equivalent to sum(hypot(1, f) - 1), without cancellation near zero.
+        self.cost = np.sum(self.disps * weighted / (1 + 1 / np.hypot(1, self.disps)))
+        logger.log(log_level, "  Iteration %3d: Length %10.3f |gradient|=%7.3e", self.neval, self.length, self.optimality)
         self.conv_path.append(self.path[1].copy())
         self.neval += 1
 
+    def _solver_target(self, X, **kwargs):
+        """Keep unsafe trials out of both the geometry and derivative caches."""
+        try:
+            self.compute_target_func(X, **kwargs)
+            return True
+        except UnsafePathError as error:
+            self.rejected_trials += 1
+            logger.debug("Rejecting unsafe trial: %s", error)
+            # Public callers may change segment, reference or friction between
+            # calls. Derive the penalty shape from the requested safe target.
+            self.compute_target_func(**kwargs)
+            return False
+
     def target_func(self, X, **kwargs):
-        """Wrapper around `compute_target_func` to prevent repeated evaluation at
-        the same geometry"""
-        self.compute_target_func(X, **kwargs)
-        return self.disps
+        """Return a private residual copy; robust solvers may modify their input."""
+        if self._solver_target(X, **kwargs):
+            return self.disps.copy()
+        return np.full(self.disps.shape, 1e20)
 
     def target_deriv(self, X, **kwargs):
         """Dense Jacobian wrapper kept for compatibility with external callers."""
-        self.compute_target_func(X, **kwargs)
-        return self.grad.toarray()
+        if self._solver_target(X, **kwargs):
+            return self.grad.toarray()
+        return np.zeros(self.grad.shape)
 
     def target_deriv_sparse(self, X, **kwargs):
-        """Sparse Jacobian wrapper used by the internal least-squares optimizer."""
-        self.compute_target_func(X, **kwargs)
-        return self.grad
+        """Sparse Jacobian wrapper; do not expose the cached matrix to the solver."""
+        if self._solver_target(X, **kwargs):
+            return self.grad.copy()
+        return sparse.csr_matrix(self.grad.shape)
 
     def smooth(self, tol=1e-3, max_iter=50, start=1, end=-1, log_level=logging.INFO, friction=None,
                xref=None):
-        """Minimize the path length as an overall function of the coordinates of all the images.
-        This should in principle be very efficient, but may be quite costly for large systems with
-        many images.
+        """Minimize the soft-L1 displacement objective with fixed prepared endpoints.
 
-        Args:
-            tol:        Convergence tolerance of the optimality. (.i.e uniform gradient of target func)
-            max_iter:   Maximum number of iterations to run.
-            start, end: Specify which section of the path to optimize.
-            log_level:  Logging level during the optimization
-
-        Returns:
-            The optimized path.  This is also stored in self.path
+        ``tol`` bounds the infinity norm of the robust objective gradient.
+        ``max_iter`` is the maximum number of residual evaluations. Small
+        problems (at most 100 Cartesian variables) use dense factorization;
+        larger problems use sparse Jacobians and an iterative solver.
         """
         start, end = self._resolve_segment(start, end)
-        X0 = np.array(self.path[start:end]).ravel()
-        if xref is None:
-            xref= X0
-        self.disps = self.grad = self.segment = None
-        logger.log(log_level, "  Degree of freedoms %6d: ", len(X0))
+        X0 = self.path[start:end].ravel().copy()
+        xref = X0 if xref is None else np.asarray(xref).ravel().copy()
         if friction is None:
             friction = self.friction
-        # Configure the keyword arguments that will be sent to the target function.
         kwargs = dict(start=start, end=end, log_level=log_level, x0=xref, friction=friction)
-        self.compute_target_func(**kwargs)  # Compute length and optimality
+        self.compute_target_func(**kwargs)
+        if self.optimality > tol and max_iter > 0:
+            derivative = self.target_deriv if X0.size <= 100 else self.target_deriv_sparse
+            try:
+                result = least_squares(
+                    self.target_func, X0, derivative,
+                    # SciPy 0.19 (the supported minimum) requires numeric
+                    # tolerances. Avoid early cost/step stopping at user tol.
+                    ftol=np.finfo(float).eps, xtol=np.finfo(float).eps, gtol=tol,
+                    max_nfev=max_iter, kwargs=kwargs, loss='soft_l1')
+                try:
+                    self.update_geometry(result['x'], start, end)
+                except UnsafePathError:
+                    self.update_geometry(X0, start, end)
+                    logger.warning("Rejected unsafe smoothing result; restored the initial segment.")
+            except BaseException:
+                # A solver error or interruption must not leave its last trial behind.
+                self.update_geometry(X0, start, end)
+                self.compute_target_func(**kwargs)
+                raise
+        # The last evaluated trial need not be the accepted result. Recompute
+        # length and the same robust objective at the actual returned geometry.
+        self.compute_target_func(**kwargs)
         if self.optimality > tol:
-            result = least_squares(self.target_func, X0, self.target_deriv_sparse, ftol=tol, gtol=tol,
-                                   max_nfev=max_iter, kwargs=kwargs, loss='soft_l1')
-            self.update_geometry(result['x'], start, end)
-            logger.log(log_level, "Smoothing converged after %d iterations", result['nfev'])
+            logger.log(logging.WARNING if log_level >= logging.INFO else log_level,
+                       "Smoothing did not converge: |gradient|=%.6g exceeds tolerance %.6g",
+                       self.optimality, tol)
         else:
-            logger.log(log_level, "Skipping smoothing: path already optimal.")
-        rmsd, self.path = align_path(self.path)
-        logger.log(log_level, "Final path length: %12.5f  Max RMSD in path: %10.2f", self.length, rmsd)
+            logger.log(log_level, "Smoothing converged: |gradient|=%.6g", self.optimality)
+        logger.log(log_level, "Final path length: %12.5f", self.length)
         return self.path
 
     def sweep(self, tol=1e-3, max_iter=50, micro_iter=20, start=1, end=-1):
-        """Minimize the path length by adjusting one image at a time and sweeping the optimization
-        side across the chain.  This is not as efficient, but scales much more friendly with the
-        size of the system given the slowness of scipy's optimizers.  Also allows more detailed
-        control and easy way of skipping nearly optimal points than the overall case.
+        """Optimize every interior image in alternating forward/backward sweeps.
 
-        Args:
-            tol:        Convergence tolerance of the optimality. (.i.e uniform gradient of target func)
-            max_iter:   Maximum number of sweeps through the path.
-            micro_iter: Number of micro-iterations to be performed when optimizing each image.
-            start, end: Specify which section of the path to optimize.
-            log_level:  Logging level during the optimization
-
-        Returns:
-            The optimized path.  This is also stored in self.path
+        Each local solve uses the same reference and friction as the full-path
+        objective. Convergence is checked with its full robust gradient after
+        each sweep; local subproblem gradients cannot establish convergence.
+        Sweeping can require more evaluations than global smoothing.
         """
         start, end = self._resolve_segment(start, end)
-        self.neval = 0
-        images = range(start, end)
-        logger.info("  Degree of freedoms %6d: ", (end - start) * 3 * self.natoms)
-        # Microiteration convergence tolerances are adjusted on the fly based on level of convergence.
-        curr_tol = tol * 10
-        self.compute_disps()    # Compute and print the initial path length
-        logger.info("  Initial length: %8.3f", self.length)
+        reference = self.path.copy()
+        kwargs = dict(start=start, end=end, x0=reference[start:end].ravel(),
+                      friction=self.friction, log_level=logging.DEBUG)
+        self.compute_target_func(**kwargs)
+        images = list(range(start, end))
+        curr_tol = max(tol * 0.5, self.optimality * 0.1)
         for iteration in range(max_iter):
-            max_dL = 0
-            X0 = self.path.copy()
-            for i in images[:-1]:   # Use self.smooth() to optimize individual images
-                xmid = (self.path[i - 1] + self.path[i + 1]) * 0.5
-                self.smooth(curr_tol, max_iter=min(micro_iter, iteration + 6),
-                            start=i, end=i + 1, log_level=logging.DEBUG,
-                            friction=self.friction if iteration else 0.1,
-                            xref=xmid)
-                max_dL = max(max_dL, self.optimality)
-            self.compute_disps()    # Compute final length after sweep
-            logger.info("Sweep %3d: L=%7.2f dX=%7.2e tol=%7.3e dL=%7.3e",
-                     iteration, self.length, np.linalg.norm(self.path - X0), curr_tol, max_dL)
-            if max_dL < tol:    # Check for convergence.
-                logger.info("Optimization converged after %d iteartions", iteration)
+            if self.optimality <= tol:
                 break
-            curr_tol = max(tol * 0.5, max_dL * 0.2) # Adjust micro-iteration threshold
-            images = list(reversed(images))         # Alternate sweeping direction.
+            for i in images:
+                self.smooth(curr_tol, max_iter=micro_iter, start=i, end=i + 1,
+                            log_level=logging.DEBUG, friction=self.friction,
+                            xref=reference[i].ravel())
+            self.compute_target_func(**kwargs)
+            logger.info("Sweep %3d: Length=%.6f |gradient|=%.6g", iteration + 1,
+                        self.length, self.optimality)
+            curr_tol = max(tol * 0.5, self.optimality * 0.1)
+            images.reverse()
+        self.compute_target_func(**kwargs)
+        if self.optimality > tol:
+            logger.warning("Sweeping did not converge: |gradient|=%.6g exceeds tolerance %.6g",
+                           self.optimality, tol)
         else:
-            logger.info("Optimization not converged after %d iteartions", iteration)
-        rmsd, self.path = align_path(self.path)
-        logger.info("Final path length: %12.5f  Max RMSD in path: %10.2f", self.length, rmsd)
+            logger.info("Sweeping converged: |gradient|=%.6g", self.optimality)
+        logger.info("Final path length: %12.5f", self.length)
         return self.path

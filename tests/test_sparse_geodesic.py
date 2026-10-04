@@ -191,14 +191,16 @@ class SparseGeodesicTest(unittest.TestCase):
     def test_smooth_uses_sparse_derivative_wrapper(self):
         rng = np.random.default_rng(23)
         atoms = ["C", "H", "O", "N"]
-        path = rng.normal(size=(4, len(atoms), 3))
+        # The small internal solves deliberately use dense factorization;
+        # exercise more than 100 Cartesian variables here.
+        path = rng.normal(size=(12, len(atoms), 3))
         geodesic = Geodesic(atoms, path, scaler=1.0, threshold=10.0, min_neighbors=0)
 
         def fail_dense_derivative(*args, **kwargs):
             raise AssertionError("dense target_deriv should not be used by smooth")
 
         geodesic.target_deriv = fail_dense_derivative
-        geodesic.smooth(tol=1e-12, max_iter=1, start=1, end=3)
+        geodesic.smooth(tol=1e-12, max_iter=1)
 
     def test_invalid_optimization_segments_raise_clear_error(self):
         rng = np.random.default_rng(29)

@@ -83,9 +83,9 @@ def get_bond_list(geom, atoms=None, threshold=4, min_neighbors=4, snapshots=30, 
 
     # Determine which images to be used to determine distances
     snapshots = min(len(geom), snapshots)
-    images = [0, len(geom) - 1]
+    images = [0] if len(geom) == 1 else [0, len(geom) - 1]
     if snapshots > 2:
-        images.extend(np.random.choice(range(1, snapshots - 1), snapshots - 2, replace=False))
+        images.extend(np.random.choice(range(1, len(geom) - 1), snapshots - 2, replace=False))
     # Get neighbor list for included geometry and merge them
     rijset = set(enforce)
     for image in images:
@@ -135,6 +135,65 @@ def get_bond_list(geom, atoms=None, threshold=4, min_neighbors=4, snapshots=30, 
     return rijlist, re
 
 
+class PairCoordinates:
+    """Evaluate selected pair coordinates using a reusable sparse row layout.
+
+    Each row has six entries: the three Cartesian derivatives for each atom.
+    Only those entries are computed, so a sparse evaluation does not allocate
+    an array proportional to the number of pairs times the number of atoms.
+    """
+
+    def __init__(self, natoms, rij_list):
+        self.natoms = natoms
+        self.pairs = np.asarray(rij_list, dtype=int).reshape(-1, 2).copy()
+        # Support the negative atom indices accepted by NumPy indexing, and
+        # sort within each pair so the CSR columns are already ordered.
+        self.pairs[self.pairs < 0] += natoms
+        if np.any(self.pairs < 0) or np.any(self.pairs >= natoms):
+            raise IndexError("Atom pair index is outside the geometry")
+        self.pairs.sort(axis=1)
+        nrij = len(self.pairs)
+        index_type = np.int32 if max(3 * natoms, 6 * nrij) <= np.iinfo(np.int32).max else np.int64
+        self.indices = (self.pairs[:, :, None] * 3 + np.arange(3)).ravel().astype(index_type)
+        self.indptr = np.arange(nrij + 1, dtype=index_type) * 6
+
+    def compute(self, geom, func=None, sparse_output=True):
+        """Return distances (optionally scaled) and their Cartesian Jacobian.
+
+        The Jacobian has shape ``(npairs, 3 * natoms)`` and is CSR by
+        default. Dense output is available for small least-squares problems.
+        Returned matrices have independent values and share the fixed layout.
+        """
+        geom = np.asarray(geom, dtype=float).reshape(-1, 3)
+        if len(geom) != self.natoms:
+            raise ValueError("Geometry atom count does not match the coordinate system")
+        left, right = self.pairs.T
+        dvec = geom[left] - geom[right]
+        rij = np.linalg.norm(dvec, axis=1)
+        coincident = np.flatnonzero(rij == 0)
+        if coincident.size:
+            i, j = self.pairs[coincident[0]]
+            raise ValueError("Cannot evaluate coincident atoms in selected pair ({}, {})".format(i, j))
+        grad = dvec / rij[:, None]
+        if func is not None:
+            values, dwdr = func(rij)
+            grad *= np.asarray(dwdr)[..., None]
+        else:
+            values = rij
+        if sparse_output:
+            data = np.concatenate((grad, -grad), axis=1).ravel()
+            bmat = sparse.csr_matrix((data, self.indices, self.indptr),
+                                     shape=(len(self.pairs), geom.size), copy=False)
+            bmat.has_sorted_indices = True
+        else:
+            bmat = np.zeros((len(self.pairs), self.natoms, 3))
+            rows = np.arange(len(self.pairs))
+            bmat[rows, left] = grad
+            bmat[rows, right] = -grad
+            bmat = bmat.reshape(len(self.pairs), geom.size)
+        return values, bmat
+
+
 def compute_rij(geom, rij_list):
     """Calculate a list of distances and their derivatives
 
@@ -149,17 +208,9 @@ def compute_rij(geom, rij_list):
     Returns:
         rij (array): Array of all the distances.
         bmat (3d array): Cartesian gradients of all the distances."""
-    nrij = len(rij_list)
-    rij = np.zeros(nrij)
-    bmat = np.zeros((nrij, len(geom), 3))
-    for idx, (i, j) in enumerate(rij_list):
-        dvec = geom[i] - geom[j]
-        rij[idx] = r = np.sqrt(dvec[0] * dvec[0] +
-                               dvec[1] * dvec[1] + dvec[2] * dvec[2])
-        grad = dvec / r
-        bmat[idx, i] = grad
-        bmat[idx, j] = -grad
-    return rij, bmat
+    geom = np.asarray(geom).reshape(-1, 3)
+    rij, bmat = PairCoordinates(len(geom), rij_list).compute(geom, sparse_output=False)
+    return rij, bmat.reshape(len(rij_list), len(geom), 3)
 
 
 def compute_wij(geom, rij_list, func):
@@ -181,12 +232,7 @@ def compute_wij(geom, rij_list, func):
         bmat (2d array): Cartesian gradients of all the scaled distances, with the
             second dimension flattened (need this to be used in scipy.optimize)."""
     geom = np.asarray(geom).reshape(-1, 3)
-    nrij = len(rij_list)
-    rij, bmat = compute_rij(geom, rij_list)
-    wij, dwdr = func(rij)
-    for idx, grad in enumerate(dwdr):
-        bmat[idx] *= grad
-    return wij, bmat.reshape(nrij, -1)
+    return PairCoordinates(len(geom), rij_list).compute(geom, func, sparse_output=False)
 
 
 def compute_rij_sparse(geom, rij_list):
@@ -196,21 +242,7 @@ def compute_rij_sparse(geom, rij_list):
     returned as CSR with shape ``(nrij, 3 * natoms)``.
     """
     geom = np.asarray(geom).reshape(-1, 3)
-    nrij = len(rij_list)
-    if nrij == 0:
-        return np.zeros(0), sparse.csr_matrix((0, geom.size))
-
-    pairs = np.asarray(rij_list, dtype=int)
-    dvec = geom[pairs[:, 0]] - geom[pairs[:, 1]]
-    rij = np.linalg.norm(dvec, axis=1)
-    grad = dvec / rij[:, None]
-
-    rows = np.repeat(np.arange(nrij), 6)
-    atom_cols = pairs[:, :, None] * 3 + np.arange(3)
-    cols = atom_cols.reshape(nrij, 6).ravel()
-    data = np.concatenate([grad, -grad], axis=1).ravel()
-    bmat = sparse.csr_matrix((data, (rows, cols)), shape=(nrij, geom.size))
-    return rij, bmat
+    return PairCoordinates(len(geom), rij_list).compute(geom)
 
 
 def compute_wij_sparse(geom, rij_list, func):
@@ -219,10 +251,8 @@ def compute_wij_sparse(geom, rij_list, func):
     The scaled coordinate values match :func:`compute_wij`. The derivative
     matrix is CSR with shape ``(nrij, 3 * natoms)``.
     """
-    rij, bmat = compute_rij_sparse(geom, rij_list)
-    wij, dwdr = func(rij)
-    dwdr = np.asarray(dwdr)
-    return wij, bmat.multiply(dwdr[:, None]).tocsr()
+    geom = np.asarray(geom).reshape(-1, 3)
+    return PairCoordinates(len(geom), rij_list).compute(geom, func)
 
 
 def morse_scaler(re=1.5, alpha=1.7, beta=0.01):
