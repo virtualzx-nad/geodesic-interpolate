@@ -9,11 +9,10 @@ Xiaolei Zhu et al, Martinez Group, Stanford University
 import logging
 import argparse
 
-import numpy as np
-
 from .fileio import read_xyz, write_xyz
 from .interpolation import redistribute
 from .geodesic import Geodesic
+from .validation import OverlapChecker
 
 
 logger = logging.getLogger(__name__)
@@ -29,14 +28,13 @@ def main():
                     "number is greater, subsampling will be performed.")
     ps.add_argument("--nimages", type=int, default=17, help="Number of images.")
     ps.add_argument("--sweep", action="store_true", help="Sweep across the path optimizing one image at "
-                    "a time, instead of moving all images at the same time.  Default is to perform sweeping "
-                    "updates if there are more than 30 atoms.")
+                    "a time, instead of moving all images at the same time. Global smoothing is the default.")
     ps.add_argument("--no-sweep", dest='sweep', action="store_false", help="Do not perform sweeping.")
-    ps.set_defaults(sweep=None)
     ps.add_argument("--output", default="interpolated.xyz", type=str, help="Output filename. "
                     "Default is interp.xyz")
     ps.add_argument("--tol", default=2e-3, type=float, help="Convergence tolerance")
-    ps.add_argument("--maxiter", default=15, type=int, help="Maximum number of minimization iterations")
+    ps.add_argument("--maxiter", default=50, type=int, help="Maximum residual evaluations for global "
+                    "smoothing, or sweeps with --sweep")
     ps.add_argument("--microiter", default=20, type=int, help="Maximum number of micro iterations for "
                     "sweeping algorithm.")
     ps.add_argument("--scaling", default=1.7, type=float, help="Exponential parameter for morse potential")
@@ -62,24 +60,31 @@ def main():
     # First redistribute number of images.  Perform interpolation if too few and subsampling if too many
     # images are given
     raw = redistribute(symbols, X, args.nimages, tol=args.tol * 5)
-    if args.save_raw is not None:
-        write_xyz(args.save_raw, symbols, raw)
-
     # Perform smoothing by minimizing distance in Cartesian coordinates with redundant internal metric
     # to find the appropriate geodesic curve on the hyperspace.
-    smoother = Geodesic(symbols, raw, args.scaling, threshold=args.dist_cutoff, friction=args.friction)
-    if args.sweep is None:
-        args.sweep = len(symbols) > 35
+    # Redistribution has already prepared the coordinate frame. Preserve both
+    # endpoints exactly and reject unsafe paths before touching output files.
+    smoother = Geodesic(symbols, raw, args.scaling, threshold=args.dist_cutoff,
+                        friction=args.friction, align=False)
+    checker = OverlapChecker(len(symbols), smoother.rij_list, symbols)
+    checker.validate(smoother.path)
+    if args.save_raw is not None:
+        write_xyz(args.save_raw, symbols, raw)
     try:
         if args.sweep:
             smoother.sweep(tol=args.tol, max_iter=args.maxiter, micro_iter=args.microiter)
         else:
             smoother.smooth(tol=args.tol, max_iter=args.maxiter)
-    finally:
-        # Save the smoothed path to output file.  try block is to ensure output is saved if one ^C the
-        # process, or there is an error
-        logging.info('Saving final path to file %s', args.output)
+    except KeyboardInterrupt:
+        # The active solve restores its starting segment before propagating
+        # interruption. Keep validated work from earlier completed sweep steps.
+        checker.validate(smoother.path)
+        logging.info('Saving interrupted path to file %s', args.output)
         write_xyz(args.output, symbols, smoother.path)
+        raise
+    checker.validate(smoother.path)
+    logging.info('Saving final path to file %s', args.output)
+    write_xyz(args.output, symbols, smoother.path)
 
 
 if __name__ == "__main__":

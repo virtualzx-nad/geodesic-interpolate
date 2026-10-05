@@ -5,13 +5,59 @@ Will need another following geodesic smoothing to get final path.
 import logging
 
 import numpy as np
-from scipy.optimize import least_squares, minimize
+from scipy import sparse
+from scipy.optimize import least_squares
 
 from .geodesic import Geodesic
-from .coord_utils import get_bond_list, compute_wij, morse_scaler, align_geom, align_path
+from .coord_utils import PairCoordinates, get_bond_list, morse_scaler, align_geom, align_path
+from .validation import UnsafePathError
 
 
 logger = logging.getLogger(__name__)
+
+
+class _MidpointObjective:
+    """Share one coordinate evaluation between the least-squares callbacks."""
+
+    def __init__(self, coordinates, scaler, reference, x0, friction):
+        self.coordinates = coordinates
+        self.scaler = scaler
+        self.reference = reference
+        self.x0 = x0.copy()
+        self.friction = friction
+        self.use_sparse = x0.size > 100
+        self.x = self.value = self.jacobian = None
+        if self.use_sparse:
+            # The friction identity adds one entry to each of its rows.
+            index_type = coordinates.indices.dtype
+            self.indices = np.concatenate((coordinates.indices, np.arange(x0.size, dtype=index_type)))
+            self.indptr = np.concatenate((coordinates.indptr,
+                                          coordinates.indptr[-1] + np.arange(1, x0.size + 1, dtype=index_type)))
+            self.friction_data = np.full(x0.size, friction)
+        else:
+            self.friction_jacobian = np.eye(x0.size) * friction
+
+    def _evaluate(self, x):
+        if self.x is not None and np.array_equal(x, self.x):
+            return
+        wx, derivative = self.coordinates.compute(x, self.scaler, sparse_output=self.use_sparse)
+        self.value = np.concatenate((wx - self.reference, (x - self.x0) * self.friction))
+        if self.use_sparse:
+            data = np.concatenate((derivative.data, self.friction_data))
+            self.jacobian = sparse.csr_matrix((data, self.indices, self.indptr),
+                                              shape=(self.value.size, x.size), copy=False)
+            self.jacobian.has_sorted_indices = True
+        else:
+            self.jacobian = np.vstack((derivative, self.friction_jacobian))
+        self.x = x.copy()
+
+    def residual(self, x):
+        self._evaluate(x)
+        return self.value.copy()
+
+    def derivative(self, x):
+        self._evaluate(x)
+        return self.jacobian.copy()
 
 
 def mid_point(atoms, geom1, geom2, tol=1e-2, nudge=0.01, threshold=4):
@@ -53,27 +99,22 @@ def mid_point(atoms, geom1, geom2, tol=1e-2, nudge=0.01, threshold=4):
     while True:
         rijlist, re = get_bond_list(geom_list, threshold=threshold + 1, enforce=add_pair)
         scaler = morse_scaler(alpha=0.7, re=re)
-        w1, _ = compute_wij(geom1, rijlist, scaler)
-        w2, _ = compute_wij(geom2, rijlist, scaler)
+        coordinates = PairCoordinates(len(geom1), rijlist)
+        w1, _ = coordinates.compute(geom1, scaler)
+        w2, _ = coordinates.compute(geom2, scaler)
         w = (w1 + w2) / 2
         d_min, x_min = np.inf, None
+        unsafe_error = None
         friction = 0.1 / np.sqrt(geom1.shape[0])
-        def target_func(X):
-            """Squared difference with reference w0"""
-            wx, dwdR = compute_wij(X, rijlist, scaler)
-            delta_w = wx - w
-            val, grad = 0.5 * np.dot(delta_w, delta_w), np.einsum('i,ij->j', delta_w, dwdR)
-            logger.info("val=%10.3f  ", val)
-            return val, grad
 
         # The inner loop performs minimization using either end-point as the starting guess.
         for coef in [0.02, 0.98]:
             x0 = (geom1 * coef + (1 - coef) * geom2).ravel()
             x0 += nudge * np.random.random_sample(x0.shape)
             logger.debug('Starting least-squares minimization of bisection point at %7.2f.', coef)
-            result = least_squares(lambda x: np.concatenate([compute_wij(x, rijlist, scaler)[0] - w, (x-x0)*friction]), x0,
-                                   lambda x: np.vstack([compute_wij(x, rijlist, scaler)[1], np.identity(x.size) * friction]), ftol=tol, gtol=tol)
-            x_mid = result['x'].reshape(-1, 3)
+            objective = _MidpointObjective(coordinates, scaler, w, x0, friction)
+            result = least_squares(objective.residual, x0, objective.derivative, ftol=tol, gtol=tol)
+            _, x_mid = align_geom(geom1, result['x'].reshape(-1, 3))
             # Take the interpolated geometry, construct new pair list and check for new contacts
             new_list = geom_list + [x_mid]
             new_rij, _ = get_bond_list(new_list, threshold=threshold, min_neighbors=0)
@@ -85,7 +126,13 @@ def mid_point(atoms, geom1, geom2, tol=1e-2, nudge=0.01, threshold=4):
                 add_pair |= extras
                 break
             # Perform local geodesic optimization for the new image.
-            smoother = Geodesic(atoms, [geom1, x_mid, geom2], 0.7, threshold=threshold, log_level=logging.DEBUG, friction=1)
+            try:
+                smoother = Geodesic(atoms, [geom1, x_mid, geom2], 0.7, threshold=threshold,
+                                    log_level=logging.DEBUG, friction=1, align=False)
+            except UnsafePathError as error:
+                unsafe_error = error
+                logger.debug("Rejecting unsafe bisection candidate: %s", error)
+                continue
             smoother.compute_disps()
             width = max([np.sqrt(np.mean((g - smoother.path[1]) ** 2)) for g in [geom1, geom2]])
             dist, x_mid = width + smoother.length, smoother.path[1]
@@ -93,6 +140,8 @@ def mid_point(atoms, geom1, geom2, tol=1e-2, nudge=0.01, threshold=4):
             if dist < d_min:
                 d_min, x_min = dist, x_mid
         else:   # Both starting guesses finished without new atom pairs.  Minimization successful
+            if x_min is None:
+                raise UnsafePathError("Neither bisection candidate produced a safe path: {}".format(unsafe_error)) from unsafe_error
             break
     return x_min
 
@@ -120,9 +169,7 @@ def redistribute(atoms, geoms, nimages, tol=1e-2):
         logger.info("Inserting image between %d and %d with Cartesian RMSD %10.3f.  New length:%d",
                     max_i, max_i + 1, dists[max_i], len(geoms) + 1)
         insertion = mid_point(atoms, geoms[max_i], geoms[max_i + 1], tol)
-        _, insertion = align_geom(geoms[max_i], insertion)
         geoms.insert(max_i + 1, insertion)
-        geoms = list(align_path(geoms)[1])
     # If there are too many images, remove points
     while len(geoms) > nimages:
         dists = [np.sqrt(np.mean((g1 - g2) ** 2)) for g1, g2 in zip(geoms[2:], geoms)]
@@ -130,5 +177,4 @@ def redistribute(atoms, geoms, nimages, tol=1e-2):
         logger.info("Removing image %d.  Cartesian RMSD of merged section %10.3f",
                     min_i + 1, dists[min_i])
         del geoms[min_i + 1]
-        geoms = list(align_path(geoms)[1])
     return geoms

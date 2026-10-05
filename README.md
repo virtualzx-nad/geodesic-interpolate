@@ -103,14 +103,57 @@ optional arguments:
   * `-h`, `--help`      show this help message and exit
   * `--nimages NIMAGES` Number of images. (default: 17)
   * `--sweep`           Sweep across the path optimizing one image at a time, instead of moving all images at the same time.
-   Default is to perform sweeping updates if there are more than 30 atoms. (default: None)
-  * `--no-sweep`        Do not perform sweeping. (default: None)
+   Global smoothing is the default for all molecule sizes. (default: False)
+  * `--no-sweep`        Use global smoothing. (default: True)
   * `--output OUTPUT`   Output filename. Default is interp.xyz (default: interpolated.xyz)
   * `--tol TOL`         Convergence tolerance (default: 0.002)
-  * `--maxiter MAXITER` Maximum number of minimization iterations (default: 15)
+  * `--maxiter MAXITER` Maximum residual evaluations for global smoothing, or sweeps with `--sweep`. (default: 50)
   * `--microiter MICROITER`  Maximum number of micro iterations for sweeping algorithm. (default: 20)
   * `--scaling SCALING` Exponential parameter for morse potential (default: 1.7)
   * `--friction FRICTION`   Size of friction term used to prevent very large change of geometry. (default: 0.01)
   * `--dist-cutoff DIST_CUTOFF` Cut-off value for the distance between a pair of atoms to be included in the coordinate system. (default: 3)
   * `--logging {DEBUG,INFO,WARNING,ERROR}`   Logging level to adopt [ DEBUG | INFO | WARNING | ERROR ] (default: INFO)
   * `--save-raw SAVE_RAW`   When specified, save the raw path after bisections be before smoothing. (default: None)
+
+
+Smoothing and validation
+----
+
+The input is aligned once during preparation. Redistribution and smoothing then
+keep both prepared endpoints exactly fixed. When passing a path that is already
+prepared to `Geodesic`, use `align=False` to retain its coordinate frame.
+
+Smoothing minimizes the soft-L1 objective of the scaled-distance displacements
+and the Cartesian friction residuals. The reported convergence measure is the
+infinity norm of `J.T @ (f / hypot(1, f))`, the gradient of that objective; the
+reported path length is a separate geometric quantity. Final values are
+recalculated at the returned geometry, and a warning is emitted if the requested
+tolerance was not reached. `--maxiter` limits evaluations, so it does not
+guarantee convergence. Sweeping visits every interior image and tests the full
+objective gradient after each sweep; it can converge more slowly than the
+default global solve.
+
+Omitted atom pairs are checked at every output image and the Cartesian
+midpoints used to calculate length. Trials with distances below
+`max(0.70 Angstrom, 0.60 * (covalent_radius_i + covalent_radius_j))` are rejected;
+without atom symbols, the cutoff is 0.70 Angstrom. Screening uses the
+[Cordero et al. covalent radii](https://doi.org/10.1039/B801115J), Table 2,
+for hydrogen through curium, including calcium (1.76 Angstrom). The single
+radius per element uses sp3 carbon and low-spin Mn, Fe and Co. Elements beyond
+curium and unrecognized symbols use an explicit 1.5 Angstrom fallback.
+The interpolation metric retains its historical H–Ar radii and 1.5 Angstrom
+fallback; correcting the overlap guard does not change that metric.
+Selected-pair coincident atoms are also rejected because their distance
+derivative is undefined. An unsafe initial path raises an error before output
+files are written.
+These checks detect severe overlaps at the sampled locations; they do not
+establish collision freedom everywhere between images or energetic validity.
+
+If Ctrl-C interrupts smoothing, the current path is validated and saved before
+the interruption is propagated. Completed sweep steps are retained; the active
+local solve restores the segment it started from. Other optimizer errors do
+not write a final output file.
+
+Run the correctness suite with `python -m unittest discover -v`. See
+[the validation report](benchmarks/README.md) for reproducible independent
+gradient checks, convergence comparisons, timing and memory measurements.
