@@ -12,6 +12,8 @@ to another checkout to measure it with the same independent evaluator.
 """
 import argparse
 import hashlib
+import importlib
+import importlib.util
 import inspect
 import json
 import logging
@@ -100,6 +102,41 @@ def _digest(array):
     return hashlib.sha256(np.asarray(array).tobytes()).hexdigest()
 
 
+def checked_source_directory(path):
+    """Reject missing/incomplete sources before Python can fall back to an install."""
+    source = Path(path).resolve()
+    for filename in ("__init__.py", "geodesic.py"):
+        expected = source / "geodesic_interpolate" / filename
+        if not expected.is_file():
+            raise FileNotFoundError("Benchmark source file does not exist: {}".format(expected))
+    return source
+
+
+def assert_source_path(symbol, source, filename):
+    """Confirm the measured callable was imported from the requested checkout."""
+    expected = (Path(source) / "geodesic_interpolate" / filename).resolve()
+    actual = Path(inspect.getfile(symbol)).resolve()
+    if actual != expected:
+        raise RuntimeError("Benchmark imported {} instead of {}".format(actual, expected))
+
+
+def reference_module(name):
+    """Load current preparation/safety code even when ``--source`` is older.
+
+    A separate package namespace prevents a baseline import from supplying the
+    legacy, incomplete radius table to the independent final safety audit.
+    """
+    package = "_geodesic_benchmark_reference"
+    if package not in sys.modules:
+        directory = ROOT / "geodesic_interpolate"
+        spec = importlib.util.spec_from_file_location(
+            package, directory / "__init__.py", submodule_search_locations=[str(directory)])
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[package] = module
+        spec.loader.exec_module(module)
+    return importlib.import_module(package + "." + name)
+
+
 def independent_clearance(path, pairs, atoms, radii):
     """Brute-force omitted-pair screening, independent of the production tree."""
     atom_i, atom_j = np.triu_indices(len(atoms), 1)
@@ -131,16 +168,17 @@ def independent_clearance(path, pairs, atoms, radii):
 def _worker(args):
     import resource
 
-    source = Path(args.source).resolve()
+    source = checked_source_directory(args.source)
     sys.path.insert(0, str(source))
     source_hash = hashlib.sha256()
     for filename in sorted((source / "geodesic_interpolate").glob("*.py")):
         source_hash.update(filename.name.encode())
         source_hash.update(filename.read_bytes())
     import scipy
-    from geodesic_interpolate.coord_utils import align_path, ATOMIC_RADIUS
+    from geodesic_interpolate.coord_utils import align_path
     from geodesic_interpolate.fileio import read_xyz
     from geodesic_interpolate.geodesic import Geodesic
+    assert_source_path(Geodesic, source, "geodesic.py")
 
     logging.disable(logging.CRITICAL)
     atoms, frames = read_xyz(ROOT / "test_cases" / CASES[args.cases[0]])
@@ -197,7 +235,9 @@ def _worker(args):
         "python": sys.version.split()[0], "numpy": np.__version__, "scipy": scipy.__version__,
         "source_digest": source_hash.hexdigest(),
     }
-    result.update(independent_clearance(geodesic.path, geodesic.rij_list, atoms, ATOMIC_RADIUS))
+    radii = reference_module("coord_utils").COVALENT_RADIUS
+    result["safety_radii"] = "Cordero covalent radii (current reference checkout)"
+    result.update(independent_clearance(geodesic.path, geodesic.rij_list, atoms, radii))
     print(json.dumps(result))
 
 

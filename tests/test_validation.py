@@ -2,7 +2,6 @@ import unittest
 
 import numpy as np
 
-from geodesic_interpolate.coord_utils import ATOMIC_RADIUS
 from geodesic_interpolate.validation import (
     OverlapChecker, UnsafePathError, validate_nonbonded_overlaps)
 
@@ -16,6 +15,8 @@ class OverlapCheckerTest(unittest.TestCase):
         for atoms, minimum in [(None, .70), (["H", "H"], .70),
                                (["C", "C"], .60 * 1.52),
                                (["Na", "Na"], .60 * 3.32),
+                               (["Ca", "Ca"], .60 * 3.52),
+                               (["Og", "Og"], .60 * 3.0),
                                (["unlisted", "unlisted"], .60 * 3.0)]:
             with self.subTest(atoms=atoms):
                 checker = OverlapChecker(2, [], atoms)
@@ -28,6 +29,27 @@ class OverlapCheckerTest(unittest.TestCase):
         checker.validate(pair_path(1.20))
         with self.assertRaisesRegex(UnsafePathError, "1.182000"):
             checker.validate(pair_path(1.10))
+
+    def test_calcium_carbon_guard_uses_published_radii(self):
+        # Cordero Table 2: Ca=1.76, C(sp3)=0.76 Angstrom. The old 1.5
+        # fallback for Ca incorrectly admitted this 1.4 Angstrom contact.
+        checker = OverlapChecker(2, [], ["c", "CA"])
+        np.testing.assert_array_equal(checker.radii, [0.76, 1.76])
+        self.assertAlmostEqual(checker.search_radius, 2.112)
+        checker.validate(pair_path(.60 * (0.76 + 1.76)))
+        with self.assertRaisesRegex(UnsafePathError, "below 1.512000 Angstrom"):
+            checker.validate(pair_path(1.4))
+
+    def test_search_radius_covers_largest_published_elements(self):
+        for symbol, radius in [("K", 2.03), ("Cs", 2.44), ("Fr", 2.60),
+                               ("U", 1.96), ("Cm", 1.69)]:
+            with self.subTest(symbol=symbol):
+                checker = OverlapChecker(2, [], [symbol, symbol])
+                minimum = .60 * (radius + radius)
+                self.assertGreaterEqual(checker.search_radius, minimum)
+                checker.validate(pair_path(minimum))
+                with self.assertRaises(UnsafePathError):
+                    checker.validate(pair_path(minimum - 1e-8))
 
     def test_included_pairs_are_exempt_in_either_order(self):
         for pairs in [[(0, 1)], [(1, 0)], np.array([[1, 0]])]:
@@ -88,8 +110,9 @@ class OverlapCheckerTest(unittest.TestCase):
 
     def test_kdtree_checks_match_independent_all_pairs_reference(self):
         rng = np.random.default_rng(112)
-        atoms = ["H", "C", "O", "Na", "Cl", "Unknown"]
-        radii = np.array([ATOMIC_RADIUS.get(a, 1.5) for a in atoms])
+        atoms = ["H", "C", "O", "Na", "Cl", "K", "Ca", "Fe", "Ce", "U", "Fr", "Cm", "Unknown"]
+        # Literal published radii keep this oracle independent of the lookup.
+        radii = np.array([.31, .76, .66, 1.66, 1.02, 2.03, 1.76, 1.32, 2.04, 1.96, 2.60, 1.69, 1.5])
         pairs = {(0, 1), (0, 3), (2, 5)}
         checker = OverlapChecker(len(atoms), pairs, atoms)
         for scale in [1., 2., 4.]:

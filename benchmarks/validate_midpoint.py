@@ -31,7 +31,8 @@ for _name in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
 
 import numpy as np
 
-from validate_smoothing import independent_clearance
+from validate_smoothing import (
+    assert_source_path, checked_source_directory, independent_clearance, reference_module)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,11 +68,13 @@ def independent_midpoint_values(x, pairs, scaler, reference, x0, friction):
 
 
 def _worker(args):
-    sys.path.insert(0, str(Path(args.source).resolve()))
+    source = checked_source_directory(args.source)
+    sys.path.insert(0, str(source))
     import scipy
-    from geodesic_interpolate.coord_utils import align_path, get_bond_list, ATOMIC_RADIUS
+    from geodesic_interpolate.coord_utils import align_path, get_bond_list
     from geodesic_interpolate.fileio import read_xyz
     import geodesic_interpolate.interpolation as interpolation
+    assert_source_path(interpolation, source, "interpolation.py")
 
     logging.disable(logging.CRITICAL)
     atoms, frames = read_xyz(ROOT / "test_cases" / CASES[args.cases[0]])
@@ -124,7 +127,10 @@ def _worker(args):
                   endpoint_error=float(np.max(np.abs(prepared - original))),
                   finite=bool(np.isfinite(path).all()),
                   python=sys.version.split()[0], numpy=np.__version__, scipy=scipy.__version__)
-    result.update(independent_clearance(path, pairs, atoms, ATOMIC_RADIUS))
+    # Validate every source against the current published radii, rather than
+    # allowing an old source's incomplete metric table to reproduce its guard bug.
+    reference_coordinates = reference_module("coord_utils")
+    result.update(independent_clearance(path, pairs, atoms, reference_coordinates.COVALENT_RADIUS))
     print(json.dumps(result))
 
 

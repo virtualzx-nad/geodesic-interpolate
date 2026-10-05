@@ -3,7 +3,7 @@
 import numpy as np
 from scipy.spatial import KDTree
 
-from .coord_utils import ATOMIC_RADIUS
+from .coord_utils import COVALENT_RADIUS
 
 
 class UnsafePathError(ValueError):
@@ -16,7 +16,9 @@ class OverlapChecker:
     Pairs included in the internal-coordinate metric are exempt. For every
     omitted pair, the minimum distance in Angstrom is ``max(0.70, 0.60 *
     (radius_i + radius_j))``. Without atom symbols, it is 0.70 Angstrom.
-    Unknown symbols use the same 1.5 Angstrom radius as the coordinate metric.
+    Radii are from Cordero et al. (2008), covering H through Cm. Symbols beyond
+    Cm and unrecognized symbols use a 1.5 Angstrom fallback. These screening
+    radii are separate from the historical coordinate metric's scaling radii.
     The pair set and radii are cached for repeated optimization evaluations.
     """
 
@@ -30,7 +32,7 @@ class OverlapChecker:
             if len(atoms) != natoms:
                 raise ValueError("The number of atom symbols must match the path")
             self.radii = np.array([
-                ATOMIC_RADIUS.get(atom.capitalize(), 1.5) for atom in atoms
+                COVALENT_RADIUS.get(atom.capitalize(), 1.5) for atom in atoms
             ])
             self.search_radius = max(0.70, 1.20 * self.radii.max()) if natoms else 0.70
 

@@ -136,12 +136,23 @@ default global solve.
 Omitted atom pairs are checked at every output image and the Cartesian
 midpoints used to calculate length. Trials with distances below
 `max(0.70 Angstrom, 0.60 * (covalent_radius_i + covalent_radius_j))` are rejected;
-without atom symbols, the cutoff is 0.70 Angstrom. Unknown symbols use the same
-1.5 Angstrom radius fallback as the coordinate metric. Selected-pair coincident
-atoms are also rejected because their distance derivative is undefined. An
-unsafe initial path raises an error before output files are written.
+without atom symbols, the cutoff is 0.70 Angstrom. Screening uses the
+[Cordero et al. covalent radii](https://doi.org/10.1039/B801115J), Table 2,
+for hydrogen through curium, including calcium (1.76 Angstrom). The single
+radius per element uses sp3 carbon and low-spin Mn, Fe and Co. Elements beyond
+curium and unrecognized symbols use an explicit 1.5 Angstrom fallback.
+The interpolation metric retains its historical H–Ar radii and 1.5 Angstrom
+fallback; correcting the overlap guard does not change that metric.
+Selected-pair coincident atoms are also rejected because their distance
+derivative is undefined. An unsafe initial path raises an error before output
+files are written.
 These checks detect severe overlaps at the sampled locations; they do not
 establish collision freedom everywhere between images or energetic validity.
+
+If Ctrl-C interrupts smoothing, the current path is validated and saved before
+the interruption is propagated. Completed sweep steps are retained; the active
+local solve restores the segment it started from. Other optimizer errors do
+not write a final output file.
 
 Run the correctness suite with `python -m unittest discover -v`. See
 [the validation report](benchmarks/README.md) for reproducible independent

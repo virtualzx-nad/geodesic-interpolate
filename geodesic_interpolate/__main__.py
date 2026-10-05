@@ -70,10 +70,18 @@ def main():
     checker.validate(smoother.path)
     if args.save_raw is not None:
         write_xyz(args.save_raw, symbols, raw)
-    if args.sweep:
-        smoother.sweep(tol=args.tol, max_iter=args.maxiter, micro_iter=args.microiter)
-    else:
-        smoother.smooth(tol=args.tol, max_iter=args.maxiter)
+    try:
+        if args.sweep:
+            smoother.sweep(tol=args.tol, max_iter=args.maxiter, micro_iter=args.microiter)
+        else:
+            smoother.smooth(tol=args.tol, max_iter=args.maxiter)
+    except KeyboardInterrupt:
+        # The active solve restores its starting segment before propagating
+        # interruption. Keep validated work from earlier completed sweep steps.
+        checker.validate(smoother.path)
+        logging.info('Saving interrupted path to file %s', args.output)
+        write_xyz(args.output, symbols, smoother.path)
+        raise
     checker.validate(smoother.path)
     logging.info('Saving final path to file %s', args.output)
     write_xyz(args.output, symbols, smoother.path)

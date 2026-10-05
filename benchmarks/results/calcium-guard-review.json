@@ -1,0 +1,92 @@
+{
+  "case": "calcium_binding_interpolated.xyz",
+  "images": 10,
+  "seed": 0,
+  "method": "sweep",
+  "max_iter": 35,
+  "micro_iter": 20,
+  "tol": 0.002,
+  "friction": 0.001,
+  "preparation": "np.linspace(0, len(frames)-1, 10, dtype=int); align once; Geodesic(align=False)",
+  "radii_source": "Cordero et al., Table 2, doi:10.1039/B801115J",
+  "independent_literal_radii_angstrom": {
+    "C": 0.76,
+    "N": 0.71,
+    "O": 0.66,
+    "S": 1.05,
+    "Ca": 1.76
+  },
+  "omitted_pair": [
+    167,
+    598
+  ],
+  "pair_symbols": [
+    "C",
+    "Ca"
+  ],
+  "corrected_pair_cutoff_angstrom": 1.512,
+  "current_source_digest": "32c57fa57fb83ec42d28c82cd646697026ec201e2d60e04bda6a1a94d24cbd85",
+  "python": "3.12.14",
+  "numpy": "2.4.6",
+  "scipy": "1.17.1",
+  "results": [
+    {
+      "version": "before",
+      "source": "94d19949e426270d01ea340714f09f128db0d694",
+      "initial_image1_pair_distance_angstrom": 24.67825471758989,
+      "final_image1_pair_distance_angstrom": 1.3562697299931536,
+      "pairs": 2810,
+      "input_digest": "53acc46f142665fc7b26da4b5bf5d50bf447afed31867bba8cace6c7bb0f626d",
+      "pair_digest": "7597dc5be1e57a7022a67be6ba74efa04546b6dc1a708e0c2bce3d5d45166186",
+      "endpoint_digest": "60189a545cf38baa2e27aca98e34de1b5be7e806890049892c5c61f3a8068c1b",
+      "endpoints_exact": true,
+      "independent_length": 7.221334468599004,
+      "independent_gradient_inf": 0.017556685132539173,
+      "reported_gradient_inf": 0.01755668513253916,
+      "gradient_error": 1.3877787807814457e-17,
+      "reached_tolerance": false,
+      "corrected_guard_error": "Nonbonded overlap for omitted atom pair (167, 598) at image 1: distance 1.356270 Angstrom is below 1.512000 Angstrom (zero-based indices)",
+      "initial_clearance": {
+        "closest_output_pair_angstrom": 0.9944074510025878,
+        "closest_midpoint_pair_angstrom": 0.6356167223564861,
+        "omitted_pair_clearance_angstrom": 1.5335544651175237,
+        "overlap_violations": 0
+      },
+      "final_clearance": {
+        "closest_output_pair_angstrom": 0.9120000000005165,
+        "closest_midpoint_pair_angstrom": 0.9680840913636533,
+        "omitted_pair_clearance_angstrom": -0.15573027000684636,
+        "overlap_violations": 2
+      }
+    },
+    {
+      "version": "after",
+      "source": "review fixes (see current_source_digest)",
+      "initial_image1_pair_distance_angstrom": 24.67825471758989,
+      "final_image1_pair_distance_angstrom": 1.7132076524827904,
+      "pairs": 2810,
+      "input_digest": "53acc46f142665fc7b26da4b5bf5d50bf447afed31867bba8cace6c7bb0f626d",
+      "pair_digest": "7597dc5be1e57a7022a67be6ba74efa04546b6dc1a708e0c2bce3d5d45166186",
+      "endpoint_digest": "60189a545cf38baa2e27aca98e34de1b5be7e806890049892c5c61f3a8068c1b",
+      "endpoints_exact": true,
+      "independent_length": 7.2276529742540045,
+      "independent_gradient_inf": 0.012791554601180788,
+      "reported_gradient_inf": 0.012791554601180786,
+      "gradient_error": 1.734723475976807e-18,
+      "reached_tolerance": false,
+      "corrected_guard_error": null,
+      "initial_clearance": {
+        "closest_output_pair_angstrom": 0.9944074510025878,
+        "closest_midpoint_pair_angstrom": 0.6356167223564861,
+        "omitted_pair_clearance_angstrom": 1.5335544651175237,
+        "overlap_violations": 0
+      },
+      "final_clearance": {
+        "closest_output_pair_angstrom": 0.9120000000002183,
+        "closest_midpoint_pair_angstrom": 0.9385170613876198,
+        "omitted_pair_clearance_angstrom": 2.183808689437683e-13,
+        "overlap_violations": 0
+      }
+    }
+  ]
+}

@@ -7,6 +7,7 @@ from unittest import mock
 import numpy as np
 
 from geodesic_interpolate import __main__ as cli
+from geodesic_interpolate import geodesic as geodesic_module
 from geodesic_interpolate.fileio import read_xyz
 from geodesic_interpolate.validation import UnsafePathError
 
@@ -72,15 +73,75 @@ class CLITest(unittest.TestCase):
                     self.assertFalse(self.output.exists())
                     self.assertFalse(self.raw_output.exists())
 
-    def test_optimizer_errors_and_interrupts_do_not_write_final_output(self):
+    def test_optimizer_errors_do_not_write_final_output(self):
         for sweep in [False, True]:
-            for error in [ValueError("failed optimization"), KeyboardInterrupt()]:
-                with self.subTest(sweep=sweep, error=type(error).__name__):
-                    self.output.write_text("preserve final output")
-                    kwargs = {"sweep_effect" if sweep else "smooth_effect": error}
-                    with self.assertRaises(type(error)):
-                        self.run_cli(["--sweep"] if sweep else [], **kwargs)
-                    self.assertEqual(self.output.read_text(), "preserve final output")
+            with self.subTest(sweep=sweep):
+                self.output.write_text("preserve final output")
+                kwargs = {"sweep_effect" if sweep else "smooth_effect": ValueError("failed optimization")}
+                with self.assertRaisesRegex(ValueError, "failed optimization"):
+                    self.run_cli(["--sweep"] if sweep else [], **kwargs)
+                self.assertEqual(self.output.read_text(), "preserve final output")
+
+    def test_interrupt_saves_validated_path_and_is_reraised(self):
+        path = np.array([[[0., 0., 0.], [2., 0., 0.]]] * 3)
+        for sweep in [False, True]:
+            with self.subTest(sweep=sweep):
+                kwargs = {"sweep_effect" if sweep else "smooth_effect": KeyboardInterrupt()}
+                with self.assertRaises(KeyboardInterrupt):
+                    self.run_cli(["--sweep"] if sweep else [], path=path, **kwargs)
+                _, written = read_xyz(self.output)
+                np.testing.assert_array_equal(written, path)
+
+    def test_interrupted_sweep_saves_completed_work_and_restores_active_trial(self):
+        # Exercise the actual CLI, redistribution, sweep, and local smooth
+        # rollback. Only inject interruption into a second-sweep solver trial.
+        filename = pathlib.Path(__file__).resolve().parents[1] / "test_cases" / "DielsAlder_interpolated.xyz"
+        original_redistribute = cli.redistribute
+        original_smooth = geodesic_module.Geodesic.smooth
+        snapshots = {}
+        visited = []
+        self.addCleanup(np.random.set_state, np.random.get_state())
+        np.random.seed(0)
+
+        def redistribute(*args, **kwargs):
+            raw = original_redistribute(*args, **kwargs)
+            snapshots["prepared"] = np.array(raw, copy=True)
+            return raw
+
+        def smooth(smoother, *args, **kwargs):
+            visited.append(kwargs["start"])
+            if len(visited) > 8:
+                def interrupt_solver(fun, x0, jac, **options):
+                    trial = x0.reshape(-1, 3).copy()
+                    trial[:, 1] += .001
+                    fun(trial.ravel(), **options["kwargs"])
+                    self.assertFalse(np.array_equal(smoother.path, snapshots["completed"]))
+                    raise KeyboardInterrupt("injected during the second sweep")
+
+                with mock.patch.object(geodesic_module, "least_squares", side_effect=interrupt_solver):
+                    return original_smooth(smoother, *args, **kwargs)
+            result = original_smooth(smoother, *args, **kwargs)
+            if len(visited) == 8:
+                snapshots["completed"] = smoother.path.copy()
+                snapshots["smoother"] = smoother
+            return result
+
+        with mock.patch("sys.argv", [
+                "geodesic_interpolate", str(filename), "--output", str(self.output),
+                "--nimages", "10", "--sweep", "--microiter", "5", "--maxiter", "50",
+                "--tol", "0.000001"]), \
+                mock.patch.object(cli, "redistribute", side_effect=redistribute), \
+                mock.patch.object(geodesic_module.Geodesic, "smooth", new=smooth):
+            with self.assertRaisesRegex(KeyboardInterrupt, "second sweep"):
+                cli.main()
+        self.assertEqual(visited[:8], list(range(1, 9)))
+        self.assertGreater(len(visited), 8)
+        self.assertFalse(np.array_equal(snapshots["completed"], snapshots["prepared"]))
+        np.testing.assert_array_equal(snapshots["smoother"].path, snapshots["completed"])
+        np.testing.assert_array_equal(snapshots["smoother"].path[[0, -1]], snapshots["prepared"][[0, -1]])
+        _, written = read_xyz(self.output)
+        # XYZ output rounds each Cartesian coordinate to twelve decimal places.
+        np.testing.assert_allclose(written, snapshots["completed"], rtol=0., atol=5.01e-13)
 
     def test_invalid_final_path_does_not_overwrite_output(self):
         atoms = ["C", "C"]
@@ -99,6 +160,30 @@ class CLITest(unittest.TestCase):
             with self.assertRaisesRegex(UnsafePathError, "image 1"):
                 cli.main()
         self.assertEqual(self.output.read_text(), "preserve final output")
+
+    def test_unsafe_interrupted_path_does_not_overwrite_output(self):
+        atoms = ["C", "C"]
+        path = np.array([[[0., 0., 0.], [2., 0., 0.]]] * 3)
+        for sweep in [False, True]:
+            with self.subTest(sweep=sweep):
+                smoother = mock.Mock(path=path.copy(), rij_list=[])
+
+                def unsafe_interrupt(**kwargs):
+                    smoother.path[1, 1, 0] = .1
+                    raise KeyboardInterrupt()
+
+                method = smoother.sweep if sweep else smoother.smooth
+                method.side_effect = unsafe_interrupt
+                self.output.write_text("preserve final output")
+                with mock.patch("sys.argv", [
+                        "geodesic_interpolate", "input.xyz", "--output", str(self.output),
+                        *(["--sweep"] if sweep else [])]), \
+                        mock.patch.object(cli, "read_xyz", return_value=(atoms, path)), \
+                        mock.patch.object(cli, "redistribute", return_value=path), \
+                        mock.patch.object(cli, "Geodesic", return_value=smoother):
+                    with self.assertRaisesRegex(UnsafePathError, "image 1"):
+                        cli.main()
+                self.assertEqual(self.output.read_text(), "preserve final output")
 
     def test_valid_raw_path_is_written_on_request(self):
         _, _, path = self.run_cli(["--save-raw", str(self.raw_output)])

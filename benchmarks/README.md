@@ -37,7 +37,68 @@ Python, imports, input preparation, independent initial evaluation, and warm-up.
 It is not an allocation delta or a claim that all observed memory is the solver.
 The machine was not otherwise reserved exclusively for this benchmark.
 
-## Results
+## Matched full-path implementation comparison
+
+The review correctly identified that the original master measurements below
+do not satisfy the matching criterion: master changes the endpoints and does
+not reach the common gradient tolerance. The following controlled comparison
+addresses that gap for complete global smoothing solves. It is **an adapted
+baseline**, not a claim about unmodified master's correctness or performance.
+
+```sh
+python benchmarks/compare_smoothing.py --baseline /path/to/baseline-checkout \
+  --cases methane trp --output /tmp/matched-smoothing.json
+```
+
+The baseline checkout is commit `476aa041f562d37d5fb4121b86817a52d75e4c5d`.
+`compare_smoothing.py` uses each checkout's native `update_intc`,
+`compute_disps`, and `compute_disp_grad` implementations inside an identical
+whole-path solver driver. Both start from exactly the same prepared Cartesian
+path, selected pairs, Morse scaler (alpha 1.7), seed 0, fixed endpoints, and
+fixed friction reference (0.001). The driver uses the same corrected overlap
+guard, geometry/cache invalidation, private residual/Jacobian copies, soft-L1
+loss, and SciPy stopping protocol (`gtol=0.002`, `ftol=xtol=machine epsilon`,
+maximum 50 residual evaluations). The baseline constructor's extra alignment
+is undone before any coordinate evaluation. No post-solve realignment occurs.
+
+The timed operation is a **complete global optimization**, including trial
+screening, coordinate and Jacobian evaluation, and sparse least-squares solves.
+This isolates the old and new evaluation/assembly implementations under a
+common corrected protocol. It does not compare sweeping, and it does not
+present the adapter as unmodified master. Timing and peak-RSS methodology are
+the same warmed, single-thread, three-process protocol described above.
+
+The harness asserts matching input, pair, endpoint, reference, metric-radius,
+and safety-radius digests. Every measured run must independently reach 0.002,
+preserve endpoints exactly, agree on the gradient infinity norm and length
+within `1e-10`, and have zero omitted-pair violations under the corrected radii. Failure of
+any condition makes the comparison fail rather than yielding a speedup claim.
+
+| Case | Evaluation/assembly implementation | Median full-solve time (s) | Median peak RSS (MiB) | Independent gradient infinity norm |
+| --- | --- | ---: | ---: | ---: |
+| Methane, 10 images | Baseline through common driver | 0.1530 | 76.6 | 0.0018196057433 |
+| Methane, 10 images | Current through common driver | 0.0776 | 76.2 | 0.0018196057433 |
+| Trp-cage, 10 images | Baseline through common driver | 6.2821 | 163.6 | 0.0019979845265 |
+| Trp-cage, 10 images | Current through common driver | 5.9670 | 151.5 | 0.0019979845265 |
+
+All matching conditions pass for all 12 timed solves. Both implementations
+produce exactly the same independently calculated terminal gradient infinity
+norm and path length in each case: methane length 1.241201150316995 and Trp-cage
+length 5.371678498047353. They also take the same solver steps: 28 residual/23
+Jacobian evaluations for methane, and 35 residual/21 Jacobian evaluations for
+Trp-cage (11 guarded rejections in each Trp-cage solve). Endpoints remain exact,
+and independently enumerated omitted pairs have zero violations at output
+images and arithmetic midpoints under the corrected radii. The raw warmed
+three-sample measurements are in
+[results/matched-smoothing.json](results/matched-smoothing.json).
+
+The controlled comparison therefore meets the matching conditions for global
+smoothing on these two paths. It measures the effect of the old/new evaluation
+and assembly kernels in a shared full-path solver, not the effect of all changes
+to the production optimizer. The unmodified-master numbers below remain
+ineligible as convergence-speed evidence.
+
+## Production smoothing and sweep results
 
 Measured on macOS arm64, Python 3.12.14, NumPy 2.4.6, SciPy 1.17.1.
 
@@ -49,8 +110,8 @@ Measured on macOS arm64, Python 3.12.14, NumPy 2.4.6, SciPy 1.17.1.
 | Trp-cage, 284 atoms | Sweep | 28.9495 | 142.6 | 0.011602299 | No |
 | Collagen, 460 atoms | Global | 8.3651 | 136.7 | 0.001270873 | Yes |
 | Collagen, 460 atoms | Sweep | 29.2495 | 141.7 | 0.001624931 | Yes |
-| Calcium binding, 600 atoms | Global | 9.5947 | 170.6 | 0.003537610 | No |
-| Calcium binding, 600 atoms | Sweep | 35.6805 | 175.3 | 0.017556690 | No |
+| Calcium binding, 600 atoms (superseded guard) | Global | 9.5947 | 170.6 | 0.003537610 | No |
+| Calcium binding, 600 atoms (superseded guard) | Sweep | 35.6805 | 175.3 | 0.017556690 | No |
 
 Methane uses the same selected atom pairs, seed, initial path, and fixed
 endpoints for both methods. Both reported final lengths agree exactly with
@@ -71,11 +132,39 @@ molecules or initial paths. The complete per-run measurements are in
 Every protein run preserves its prepared endpoints exactly. Independent final
 lengths agree with the reported values within `2e-15`, and independently
 calculated gradients agree within `2e-16`, including for runs which exhaust
-their budgets. Both collagen and calcium methods have zero independently
-detected omitted-pair overlap violations at the sampled locations.
-Calcium sweeping finishes only `5.2e-13` Angstrom above the closest omitted-pair
-threshold. This documents proximity to the guard boundary; it is not evidence
-that the unconstrained gradient tolerance was attained.
+their budgets. Both collagen methods have zero independently detected
+omitted-pair overlap violations at the sampled locations.
+
+The calcium rows and safety fields in the historical
+[results/proteins.json](results/proteins.json) are **superseded** by the radius
+correction. Their oracle reused the legacy metric table, which gave calcium
+the 1.5 Angstrom fallback instead of its published 1.76 Angstrom covalent
+radius. The old sweep result has two omitted-pair violations when independently
+checked with corrected radii; it must not be described as passing the requested
+safety threshold. Omitted C167-Ca598, for example, reaches 1.3562697300 Angstrom
+from an initial 24.6782547176 Angstrom, below its correct 1.512 Angstrom cutoff.
+The current benchmark oracles load the complete covalent-radius table from the
+current reference checkout even when timing an older implementation. The
+legacy metric/scaling table remains unchanged so the objective is preserved.
+
+The corrected 10-image calcium sweep (seed 0, friction 0.001, 35 sweeps,
+20 evaluations per interior image) ends with C167-Ca598 at **1.71320765248
+Angstrom**, above the 1.512 Angstrom threshold. An independent all-pairs audit
+using explicit published C/N/O/S/Ca radii finds **zero violations** at output
+images and arithmetic midpoints; the minimum omitted-pair clearance is
+`2.1838e-13` Angstrom. Input, selected-pair, and prepared-endpoint digests match
+the earlier run exactly, and both endpoints remain fixed. The independent
+gradient infinity norm is **0.01279155460118**, so the run is explicitly
+**not converged** to 0.002. This is a correctness rerun, not a new warmed
+three-sample timing comparison. The before/after measurements and literal-radii
+audit are in [results/calcium-guard-review.json](results/calcium-guard-review.json).
+The corrected numerical result can be reproduced with:
+
+```sh
+python benchmarks/validate_smoothing.py --cases calcium --methods sweep \
+  --images 10 --seed 0 --friction 0.001 --tol 0.002 \
+  --sweeps 35 --micro-iter 20 --repeats 1 --output /tmp/calcium-corrected.json
+```
 
 A final-code rerun confirms unchanged methane and Trp-cage global gradients,
 lengths, and fixed endpoints after the SciPy compatibility adjustment. The
@@ -151,11 +240,11 @@ preservation, complete forward/backward sweep coverage, solver selection, and
 same-tolerance methane convergence. Separate overlap tests cover omitted pairs,
 initial-path rejection, rejected-trial restoration, and Cartesian midpoints.
 
-All 56 unit tests pass in both tested environments: Python 3.12.14 with NumPy
+All 63 unit tests pass in both tested environments: Python 3.12.14 with NumPy
 2.4.6/SciPy 1.17.1, and Python 3.9.6 with NumPy 2.0.2/SciPy 1.13.1. Budget
 exhaustion is explicitly tested to emit a nonconvergence warning.
-The [GitHub Actions matrix run](https://github.com/virtualzx-nad/geodesic-interpolate/actions/runs/37219675842)
-also passed all five Python versions (3.8 through 3.12) on implementation commit
+The original [GitHub Actions matrix run](https://github.com/virtualzx-nad/geodesic-interpolate/actions/runs/37219675842)
+passed all five Python versions (3.8 through 3.12) on implementation commit
 `dbf4799`.
 
 The benchmark also independently enumerates all atom pairs at final images and

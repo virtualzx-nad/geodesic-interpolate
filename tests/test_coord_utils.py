@@ -5,11 +5,30 @@ import numpy as np
 from scipy import sparse
 
 from geodesic_interpolate.coord_utils import (
-    PairCoordinates, compute_rij, compute_rij_sparse, compute_wij,
+    ATOMIC_RADIUS, COVALENT_RADIUS, PairCoordinates, compute_rij, compute_rij_sparse, compute_wij,
     compute_wij_sparse, get_bond_list, morse_scaler)
 
 
 class CoordUtilsTest(unittest.TestCase):
+    def test_overlap_radii_cover_every_published_element_through_curium(self):
+        symbols = """H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca
+            Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo
+            Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu
+            Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po
+            At Rn Fr Ra Ac Th Pa U Np Pu Am Cm""".split()
+        self.assertEqual(set(COVALENT_RADIUS), set(symbols))
+        self.assertEqual(len(COVALENT_RADIUS), 96)
+        self.assertEqual(COVALENT_RADIUS["Ca"], 1.76)
+        self.assertTrue(all(radius > 0 for radius in COVALENT_RADIUS.values()))
+
+    def test_overlap_radius_update_preserves_legacy_metric_scaling(self):
+        geometry = np.array([[0., 0., 0.], [2., 0., 0.]])
+        pairs, reference = get_bond_list(geometry, atoms=["C", "Ca"], min_neighbors=0)
+        self.assertEqual(pairs, [(0, 1)])
+        self.assertNotIn("Ca", ATOMIC_RADIUS)
+        np.testing.assert_allclose(reference, [.76 + 1.5])
+        self.assertEqual({key: COVALENT_RADIUS[key] for key in ATOMIC_RADIUS}, ATOMIC_RADIUS)
+
     def test_pair_coordinates_match_independent_values_and_gradients(self):
         rng = np.random.default_rng(14)
         geom = rng.normal(size=(7, 3))
